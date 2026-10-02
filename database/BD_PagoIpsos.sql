@@ -1051,10 +1051,12 @@ IF NOT EXISTS (SELECT 1 FROM [TiposGasto] WHERE [Nombre] = N'Costo Directo')
 IF NOT EXISTS (SELECT 1 FROM [TiposGasto] WHERE [Nombre] = N'Payroll')
     INSERT INTO [TiposGasto] ([Nombre], [CreadoEn], [CreadoPor]) VALUES (N'Payroll', SYSUTCDATETIME(), N'script');
 
--- Parámetros. TODO(diseño): RUT y razón social reales de la empresa receptora.
+-- Parámetros: empresa receptora de las boletas.
 IF NOT EXISTS (SELECT 1 FROM [Parametros])
     INSERT INTO [Parametros] ([PlazoCorreccionMinutos], [RutEmpresa], [RazonSocialEmpresa], [DiaDescargaDesde], [DiaDescargaHasta], [DiaPago], [DiaLimiteBoleta], [CreadoEn], [CreadoPor])
-    VALUES (60, N'77777777-7', N'TODO(diseño): razón social', 28, 30, 5, 10, SYSUTCDATETIME(), N'script');
+    VALUES (60, N'76007075-0', N'IPSOS OBSERVER (CHILE) S.A.', 28, 30, 5, 10, SYSUTCDATETIME(), N'script');
+UPDATE [Parametros] SET [RutEmpresa] = N'76007075-0', [RazonSocialEmpresa] = N'IPSOS OBSERVER (CHILE) S.A.', [ModificadoEn] = SYSUTCDATETIME(), [ModificadoPor] = N'script'
+WHERE [RutEmpresa] = N'77777777-7';
 
 -- Tasa de retención por año (R-05)
 IF NOT EXISTS (SELECT 1 FROM [TasasRetencion] WHERE [Anio] = 2026)

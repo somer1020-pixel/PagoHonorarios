@@ -100,6 +100,30 @@ public class ProduccionYBoletaTests
     }
 
     [Fact]
+    public void Lectura_FormatoRealDelSii_GuionTipograficoYTituloEnDosLineas()
+    {
+        // Misma disposición que la boleta electrónica real del SII (datos ficticios): título en dos líneas, "N ° 164",
+        // RUT con signo menos U+2212 y receptor en la misma línea que la razón social.
+        string[] lineas =
+        [
+            "BOLETA DE HONORARIOS", "ELECTRONICA", "PERSONA FICTICIA DE PRUEBA", "N ° 164", "RUT: 12.345.678\u22125",
+            "GIRO(S): OTRAS ACTIVIDADES DE SERVICIOS PERSONALES N.C.P.,", "Avenida Ficticia 123 , CIUDAD",
+            "Fecha: 01 de Octubre de 2026", "Señor(es): IPSOS OBSERVER (CHILE)S.A. Rut: 76.007.075\u2212 0",
+            "Domicilio: CALLE FICTICIA 555,", "Por atención profesional:", "DESARROLLO IVR 471.976", "Total Honorarios: $: 471.976",
+            "15.25 % Impto. Retenido: 71.976", "Total: 400.000", "Fecha / Hora Emisión: 01/10/2026 12:04", "Res. Ex. N° 83 de 30/08/2004"
+        ];
+        var l = LectorBoletaTexto.Leer(lineas);
+        Assert.Equal("164", l.Datos.Numero);
+        Assert.Equal("12345678-5", l.Datos.RutEmisor);
+        Assert.Equal("76007075-0", l.Datos.RutReceptor);
+        Assert.Equal("PERSONA FICTICIA DE PRUEBA", l.Datos.NombreEmisor);
+        Assert.Equal(new DateOnly(2026, 10, 1), l.Datos.FechaEmision);
+        Assert.Equal((471976m, 71976m, 400000m), (l.Datos.Bruto, l.Datos.Retencion, l.Datos.Liquido));
+        Assert.Equal(Confianza.Alta, l.Confianza);
+        Assert.True(Conciliacion.Conciliar(l.Datos, 12345678, new Parametro().RutEmpresa, new DateOnly(2026, 10, 1), [471976m], (_, _) => false).Cuadra);
+    }
+
+    [Fact]
     public void Lectura_FechaCorta_Normalizacion_YConfianza()
     {
         var l = LectorBoletaTexto.Leer(["Boleta de Honorarios Electrónica", "N° 512", "RUT 17.654.321-3", "Fecha 31/10/2026", "Total Honorarios $ 260.000",

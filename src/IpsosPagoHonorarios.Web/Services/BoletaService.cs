@@ -23,11 +23,21 @@ public static class LectorPdf
         using var doc = PdfDocument.Open(pdf);
         foreach (var pagina in doc.GetPages())
         {
-            var palabras = pagina.GetWords().ToList();
-            foreach (var grupo in palabras
-                         .GroupBy(w => Math.Round(w.BoundingBox.Bottom / 3.0))
-                         .OrderByDescending(g => g.Key))
-                lineas.Add(string.Join(" ", grupo.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text)));
+            // Agrupa palabras cuya base difiere en menos de 3 pt (el SII alinea montos y etiquetas con pequeñas diferencias).
+            var actual = new List<UglyToad.PdfPig.Content.Word>();
+            double? baseLinea = null;
+            foreach (var w in pagina.GetWords().OrderByDescending(w => w.BoundingBox.Bottom))
+            {
+                if (baseLinea is not null && Math.Abs(baseLinea.Value - w.BoundingBox.Bottom) > 3)
+                {
+                    lineas.Add(string.Join(" ", actual.OrderBy(x => x.BoundingBox.Left).Select(x => x.Text)));
+                    actual.Clear();
+                    baseLinea = null;
+                }
+                baseLinea ??= w.BoundingBox.Bottom;
+                actual.Add(w);
+            }
+            if (actual.Count > 0) lineas.Add(string.Join(" ", actual.OrderBy(x => x.BoundingBox.Left).Select(x => x.Text)));
         }
         return lineas;
     }

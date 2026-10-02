@@ -19,6 +19,13 @@ public class Semilla(AppDbContext db, RoleManager<IdentityRole> roles, UserManag
         await CargarAsync(Path.Combine(carpeta, "tipos_gasto.csv"), db.TiposGasto, f => new TipoGasto { Nombre = f[0] }, t => t.Nombre);
 
         if (!await db.Parametros.AnyAsync()) db.Parametros.Add(new Parametro());
+        // Bases creadas con el RUT ficticio inicial: se corrige al RUT real de la empresa receptora.
+        foreach (var p in await db.Parametros.Where(p => p.RutEmpresa == "77777777-7").ToListAsync())
+        {
+            var real = new Parametro();
+            p.RutEmpresa = real.RutEmpresa;
+            p.RazonSocialEmpresa = real.RazonSocialEmpresa;
+        }
         if (!await db.TasasRetencion.AnyAsync()) db.TasasRetencion.Add(new TasaRetencion { Anio = 2026, Tasa = 0.1525m });
         await db.SaveChangesAsync();
 

@@ -7,7 +7,8 @@ namespace IpsosPagoHonorarios.Core;
 /// <summary>Expresiones regulares configurables para leer la boleta del SII (texto ya normalizado).</summary>
 public sealed class OpcionesLectura
 {
-    public string Numero { get; set; } = @"BOLETA DE HONORARIOS ELECTRONICA.*?N\s*[°ºO]?\.?\s*:?\s*(\d+)";
+    /// <summary>"BOLETA DE HONORARIOS ELECTRONICA" puede venir en una o dos líneas; el N° aparece como "N° 164" o "N ° 164".</summary>
+    public string Numero { get; set; } = @"BOLETA\s+DE\s+HONORARIOS\s+ELECTRONICA.*?\bN\s*[°º]?\s*\.?\s*:?\s*(\d+)";
     public string Rut { get; set; } = @"(\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK])";
     public string FechaLarga { get; set; } = @"(\d{1,2})\s+DE\s+([A-Z]+)\s+DE\s+(\d{4})";
     public string FechaCorta { get; set; } = @"(\d{2})/(\d{2})/(\d{4})";
@@ -27,6 +28,8 @@ public static class LectorBoletaTexto
     /// <summary>Mayúsculas y sin tildes.</summary>
     public static string Normalizar(string texto)
     {
+        // El PDF del SII usa el signo menos tipográfico (U+2212) u otros guiones en los RUT: se llevan a "-".
+        texto = Regex.Replace(texto, "[\u2010-\u2015\u2212\uFE63\uFF0D]", "-");
         var formD = texto.ToUpperInvariant().Normalize(NormalizationForm.FormD);
         var sb = new StringBuilder(formD.Length);
         foreach (var c in formD)
@@ -58,7 +61,10 @@ public static class LectorBoletaTexto
         {
             // El nombre del emisor suele estar en la línea anterior a su RUT.
             var idx = norm.FindIndex(l => Regex.Matches(l, op.Rut).Any(m => RutHelper.TryParse(Regex.Replace(m.Value, @"\s", ""), out var c, out _) && $"{c}" == emisor.Split('-')[0]));
-            if (idx > 0 && !norm[idx - 1].Any(char.IsDigit)) nombre = norm[idx - 1].Trim();
+            // El nombre del emisor está sobre su RUT (a veces con el N° de boleta entre medio).
+            for (var i = idx - 1; i >= 0 && i >= idx - 3 && nombre is null; i--)
+                if (!norm[i].Any(char.IsDigit) && !Regex.IsMatch(norm[i], @"BOLETA|HONORARIOS|ELECTRONICA") && norm[i].Trim().Length > 3)
+                    nombre = norm[i].Trim();
         }
 
         DateOnly? fecha = null;

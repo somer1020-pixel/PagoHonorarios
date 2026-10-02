@@ -279,9 +279,9 @@ public class Auditoria
 public class Parametro : EntidadAuditable
 {
     public int PlazoCorreccionMinutos { get; set; } = 60;
-    /// <summary>TODO(diseño): RUT y razón social reales de la empresa receptora.</summary>
-    public string RutEmpresa { get; set; } = "77777777-7";
-    public string RazonSocialEmpresa { get; set; } = "TODO(diseño): razón social";
+    /// <summary>Empresa receptora de las boletas (según boleta del SII).</summary>
+    public string RutEmpresa { get; set; } = "76007075-0";
+    public string RazonSocialEmpresa { get; set; } = "IPSOS OBSERVER (CHILE) S.A.";
     public int DiaDescargaDesde { get; set; } = 28;
     public int DiaDescargaHasta { get; set; } = 30;
     public int DiaPago { get; set; } = 5;
