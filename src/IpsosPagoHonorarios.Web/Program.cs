@@ -43,6 +43,8 @@ builder.Services.AddIdentity<Usuario, IdentityRole>(o =>
     .AddDefaultTokenProviders()
     .AddClaimsPrincipalFactory<FabricaClaims>();
 // Activación y recuperación: enlace de un solo uso válido 72 horas.
+// Usuario desactivado o con perfil cambiado: la sesión abierta se revalida (y se cierra) en a lo más 5 minutos.
+builder.Services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.FromMinutes(5));
 builder.Services.Configure<DataProtectionTokenProviderOptions>(o => o.TokenLifespan = TimeSpan.FromHours(72));
 builder.Services.ConfigureApplicationCookie(o =>
 {
@@ -119,6 +121,7 @@ builder.Services.AddScoped<RevisionService>();
 builder.Services.AddScoped<PlazosService>();
 builder.Services.AddScoped<PagoService>();
 builder.Services.AddScoped<PrestadoresService>();
+builder.Services.AddScoped<UsuariosService>();
 builder.Services.AddScoped<PortalService>();
 builder.Services.AddScoped<ContextoLayout>();
 builder.Services.AddScoped<Semilla>();

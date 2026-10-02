@@ -199,4 +199,72 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         var c = Cliente();
         Assert.Equal("/Portal", (await IngresarAsync(c, "12.345.678-5", "clave1234")).Headers.Location!.OriginalString);
     }
+
+    [Fact]
+    public async Task UsuariosInternos_SoloAdministrador_CicloDeVida()
+    {
+        var fin = Cliente();
+        await IngresarAsync(fin, "carolina.diaz@ejemplo.cl");
+        Denegado(await fin.GetAsync("/Maestros/Usuarios"));
+        Assert.DoesNotContain("/Maestros/Usuarios", await fin.GetStringAsync("/Maestros/Jobs"));
+
+        var adm = Cliente();
+        await IngresarAsync(adm, "admin@ejemplo.cl");
+        var html = await adm.GetStringAsync("/Maestros/Usuarios");
+        Assert.Contains("carolina.diaz@ejemplo.cl", html);
+        Assert.DoesNotContain("17345120-2", html);   // los prestadores no se listan
+
+        using var scope = app.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var usuarios = sp.GetRequiredService<UsuariosService>();
+        var prestadores = sp.GetRequiredService<PrestadoresService>();
+        var db = sp.GetRequiredService<AppDbContext>();
+
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("no-es-correo", "X", Roles.Finanzas, "https://h"));
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("nuevo@ejemplo.cl", "X", Roles.Prestador, "https://h"));
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("carolina.diaz@ejemplo.cl", "X", Roles.Finanzas, "https://h"));
+
+        var enlace = await usuarios.CrearAsync("nuevo@ejemplo.cl", "Usuario Nuevo", Roles.Finanzas, "https://h");
+        Assert.StartsWith("https://h/Cuenta/Activar?u=nuevo%40ejemplo.cl&t=", enlace);
+        Assert.Contains(await db.Correos.ToListAsync(), c => c.Para == "nuevo@ejemplo.cl" && c.Cuerpo.Contains(enlace));
+        var nuevo = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "nuevo@ejemplo.cl");
+        Assert.False(nuevo.Activado);
+        Assert.Equal(Roles.Finanzas, nuevo.Perfil);
+
+        var token = Uri.UnescapeDataString(enlace.Split("&t=")[1]);
+        Assert.True((await prestadores.DefinirContrasenaAsync("nuevo@ejemplo.cl", token, "clave1234", activacion: true)).Succeeded);
+        var c = Cliente();
+        Assert.Equal("/", (await IngresarAsync(c, "nuevo@ejemplo.cl", "clave1234")).Headers.Location!.OriginalString);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/Finanzas/Revision")).StatusCode);
+
+        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo Editado", Roles.Operaciones);
+        var editado = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "nuevo@ejemplo.cl");
+        Assert.Equal((Roles.Operaciones, "Usuario Nuevo Editado"), (editado.Perfil, editado.Usuario.NombreCompleto));
+        Assert.True(editado.Activado);
+        Assert.NotNull(editado.UltimoIngreso);
+
+        await usuarios.CambiarActivoAsync(nuevo.Usuario.Id, false);
+        Assert.Contains("incorrectos", await (await IngresarAsync(Cliente(), "nuevo@ejemplo.cl", "clave1234")).Content.ReadAsStringAsync());
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.EnviarEnlaceAsync(nuevo.Usuario.Id, "https://h"));
+        await usuarios.CambiarActivoAsync(nuevo.Usuario.Id, true);
+        Assert.StartsWith("https://h/Cuenta/Recuperar?", await usuarios.EnviarEnlaceAsync(nuevo.Usuario.Id, "https://h"));
+
+        // Resguardos: no se deja el sistema sin Administrador activo; los prestadores no se administran aquí.
+        var admin = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "admin@ejemplo.cl");
+        Assert.Contains("único Administrador", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.CambiarActivoAsync(admin.Usuario.Id, false))).Message);
+        Assert.Contains("único Administrador", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.EditarAsync(admin.Usuario.Id, "Admin", Roles.Finanzas))).Message);
+        var prestador = await db.Users.FirstAsync(u => u.PrestadorId != null);
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CambiarActivoAsync(prestador.Id, false));
+
+        // Por la página: el Administrador no puede desactivarse a sí mismo (aunque exista otro Administrador).
+        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo", Roles.Admin);
+        var r = await adm.PostAsync("/Maestros/Usuarios?handler=Activo", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["id"] = admin.Usuario.Id, ["activo"] = "false", ["__RequestVerificationToken"] = await TokenAsync(adm, "/Maestros/Usuarios")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, r.StatusCode);
+        Assert.Contains("No puedes desactivar tu propio usuario", await adm.GetStringAsync("/Maestros/Usuarios"));
+        Assert.True((await db.Users.AsNoTracking().SingleAsync(u => u.Id == admin.Usuario.Id)).Activo);
+        Assert.Contains(await db.Auditorias.ToListAsync(), a => a.Accion == "Cambiar perfil" && a.EntidadId == "nuevo@ejemplo.cl");
+    }
 }

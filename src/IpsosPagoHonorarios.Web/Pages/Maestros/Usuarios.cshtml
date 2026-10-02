@@ -1,0 +1,89 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Maestros.UsuariosModel
+@using IpsosPagoHonorarios.Web.Services
+@{
+    ViewData["Title"] = "Usuarios";
+    ViewData["Activo"] = "usuarios";
+    var s = Model.Sel;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Maestros / Usuarios internos</div>
+        <h1>Usuarios</h1>
+        <div class="rol">Rol: Administrador</div>
+    </div>
+    <button type="button" class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#form-nuevo">Nuevo usuario</button>
+</div>
+@if (Model.Enlace is not null)
+{
+    <div class="tarjeta">
+        <span class="text-13">Enlace para <strong>@Model.EnlacePara</strong> (un solo uso, válido 72 horas). Si el correo no llega, entrégaselo por un canal seguro:</span>
+        <div class="d-flex gap-2"><input id="enlace" class="form-control form-control-sm mono" value="@Model.Enlace" readonly aria-label="Enlace" /><button type="button" class="btn btn-secondary btn-sm" data-copiar="enlace">Copiar</button></div>
+    </div>
+}
+<form method="post" asp-page-handler="Crear" class="tarjeta collapse" id="form-nuevo">
+    <h2>Nuevo usuario</h2>
+    <div class="campos-3">
+        <div><label class="form-label" for="un">Nombre completo</label><input id="un" name="nombre" class="form-control" required /></div>
+        <div><label class="form-label" for="ue">Correo (será su usuario)</label><input id="ue" name="email" type="email" class="form-control" required /></div>
+        <div><label class="form-label" for="up">Perfil</label>
+            <select id="up" name="perfil" class="form-select" required>
+                @foreach (var p in UsuariosService.Perfiles) { <option value="@p">@UsuariosService.NombrePerfil(p)</option> }
+            </select></div>
+    </div>
+    <p class="m-0 text-12 muted">La persona recibe un enlace para definir su propia contraseña: el Administrador nunca la conoce.</p>
+    <button class="btn btn-primary align-self-start">Crear usuario</button>
+</form>
+@if (s is not null)
+{
+    var yo = s.Usuario.Id == Model.MiId;
+    <div class="tarjeta">
+        <h2>@s.Usuario.NombreCompleto <span class="text-13 muted mono">@s.Usuario.Email</span></h2>
+        <form method="post" asp-page-handler="Editar" class="d-flex flex-wrap gap-2 align-items-end">
+            <input type="hidden" name="id" value="@s.Usuario.Id" />
+            <div><label class="form-label" for="en">Nombre completo</label><input id="en" name="nombre" class="form-control form-control-sm" value="@s.Usuario.NombreCompleto" required /></div>
+            <div><label class="form-label" for="ep">Perfil</label>
+                <select id="ep" name="perfil" class="form-select form-select-sm">
+                    @foreach (var p in UsuariosService.Perfiles) { <option value="@p" selected="@(p == s.Perfil)">@UsuariosService.NombrePerfil(p)</option> }
+                </select></div>
+            <button class="btn btn-primary btn-sm">Guardar</button>
+            <a class="btn btn-ghost btn-sm" href="/Maestros/Usuarios">Cerrar</a>
+        </form>
+        <div class="fila">
+            <form method="post" asp-page-handler="Enlace" class="m-0"><input type="hidden" name="id" value="@s.Usuario.Id" />
+                <button class="btn btn-secondary btn-sm" disabled="@(!s.Usuario.Activo)">@(s.Activado ? "Restablecer contraseña" : "Reenviar activación")</button></form>
+            @if (s.Bloqueado)
+            {
+                <form method="post" asp-page-handler="Desbloquear" class="m-0"><input type="hidden" name="id" value="@s.Usuario.Id" />
+                    <button class="btn btn-secondary btn-sm">Desbloquear</button></form>
+            }
+            <form method="post" asp-page-handler="Activo" class="m-0"><input type="hidden" name="id" value="@s.Usuario.Id" /><input type="hidden" name="activo" value="@((!s.Usuario.Activo).ToString().ToLowerInvariant())" />
+                <button class="btn btn-secondary btn-sm" disabled="@(yo && s.Usuario.Activo)">@(s.Usuario.Activo ? "Desactivar" : "Reactivar")</button></form>
+        </div>
+        <span class="text-12 muted">Desactivar impide el ingreso y cierra sus sesiones abiertas (en a lo más 5 minutos). Toda acción queda en la bitácora.@(yo ? " No puedes desactivarte ni quitarte el perfil Administrador." : "")</span>
+    </div>
+}
+<div class="tarjeta tabla">
+    <table class="table">
+        <thead><tr><th>Nombre</th><th>Correo (usuario)</th><th>Perfil</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var x in Model.Lista)
+        {
+            <tr class="@(x.Usuario.Id == s?.Usuario.Id ? "sel" : null)">
+                <td>@x.Usuario.NombreCompleto @if (x.Usuario.Id == Model.MiId) { <span class="text-12 muted">(tú)</span> }</td>
+                <td class="mono text-12">@x.Usuario.Email</td>
+                <td>@UsuariosService.NombrePerfil(x.Perfil)</td>
+                <td>
+                    @if (!x.Usuario.Activo) { @Badge.Html(Tono.Neutral, "Desactivado") }
+                    else if (x.Bloqueado) { @Badge.Html(Tono.Danger, "Bloqueado") }
+                    else if (!x.Activado) { @Badge.Html(Tono.Warning, "Pendiente de activación") }
+                    else { @Badge.Html(Tono.Success, "Activo") }
+                </td>
+                <td class="tabular">@Formato.FechaHora(x.UltimoIngreso)</td>
+                <td><a href="?editar=@x.Usuario.Id">Editar</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+<p class="m-0 text-12 muted">Los prestadores no aparecen aquí: su acceso al portal se gestiona en Maestros / Prestadores.</p>

@@ -18,7 +18,8 @@
             ("seguimiento", "Seguimiento boletas", "bi-file-earmark-pdf", "/Boletas/Seguimiento", Ctx.BoletasPendientes),
             ("correcciones", "Correcciones", "bi-pencil-square", "/Ciclos/Correcciones", Ctx.ObservacionesAbiertas)]),
         ("Finanzas", [("revision", "Revisión", "bi-clipboard-check", "/Finanzas/Revision", 0), ("pagos", "Pagos y cierre", "bi-bank", "/Finanzas/Pagos", 0)]),
-        ("Maestros", [("prestadores", "Prestadores", "bi-people", "/Maestros/Prestadores", 0), ("jobs", "Jobs y glosas", "bi-briefcase", "/Maestros/Jobs", 0)]),
+        ("Maestros", [("prestadores", "Prestadores", "bi-people", "/Maestros/Prestadores", 0), ("jobs", "Jobs y glosas", "bi-briefcase", "/Maestros/Jobs", 0),
+            .. (User.IsInRole(Roles.Admin) ? [("usuarios", "Usuarios", "bi-person-gear", "/Maestros/Usuarios", 0)] : Array.Empty<(string, string, string, string, int)>())]),
         ("Consulta", [("historial", "Historial", "bi-archive", "/Ciclos/Historial", 0)])
     };
 }
