@@ -150,6 +150,18 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
     // ---------- Importación ----------
 
     /// <summary>Lee una planilla en formato Finanzas: encabezado B1–B5 y datos desde la fila 9 hasta la primera fila con Rut vacío.</summary>
+    /// <summary>Reconoce el formato Finanzas: en la hoja Planilla (o la primera), A8 = "Tipo de Gasto" e I8 = "Rut".</summary>
+    public static bool EsFormatoFinanzas(Stream xlsx)
+    {
+        try
+        {
+            using var wb = new XLWorkbook(xlsx);
+            var ws = wb.Worksheets.FirstOrDefault(w => w.Name.Equals(HojaPlanilla, StringComparison.OrdinalIgnoreCase)) ?? wb.Worksheet(1);
+            return Clave(ws.Cell(FilaTitulos, 1).GetString()) == "tipo de gasto" && Clave(ws.Cell(FilaTitulos, 9).GetString()) == "rut";
+        }
+        catch (Exception) { return false; }
+    }
+
     public static ArchivoLeido LeerFormatoFinanzas(Stream xlsx)
     {
         using var wb = new XLWorkbook(xlsx);

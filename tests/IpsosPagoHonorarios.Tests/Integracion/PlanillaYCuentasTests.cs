@@ -238,6 +238,18 @@ public class PlanillaYCuentasTests
     }
 
     [Fact]
+    public async Task PlanillaFinanzas_SeDetectaAunqueSeElijaExportacion()
+    {
+        var (e, p, _) = await DataProcessingAsync();
+        using var _e = e;
+        var bytes = await e.Excel.ExportarAsync(p);
+        var r = await e.Produccion.ImportarAsync(new SolicitudImportacion(p.CicloId, p.AreaId, "Costo Directo", p.ResponsableNombre, p.ResponsableEmail,
+            TipoArchivoProduccion.Exportacion, "Planilla honorarios OCTUBRE_2026 - DATA PROCESSING v1.xlsx", bytes));
+        Assert.True(r.Cargada, string.Join("; ", r.Errores.Take(3).Select(x => $"{x.Fila} {x.Campo} {x.Motivo}")));
+        Assert.Equal(219564m, r.Planilla!.Activas().Sum(l => l.ValorTotalBruto));
+    }
+
+    [Fact]
     public async Task R21_AvisoAlGenerarsePago()
     {
         using var e = new Entorno();

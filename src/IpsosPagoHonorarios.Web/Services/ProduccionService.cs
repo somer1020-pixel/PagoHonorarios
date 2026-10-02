@@ -29,7 +29,7 @@ public class ProduccionService(
         var tiposGasto = await db.TiposGasto.Select(t => t.Nombre).ToListAsync();
         if (!tiposGasto.Contains(s.TipoGasto)) errores.Add(new(0, "Tipo de gasto", "El tipo de gasto es obligatorio."));
         var ext = Path.GetExtension(s.NombreArchivo).ToLowerInvariant();
-        if (ext is not (".xlsx" or ".csv") || (s.TipoArchivo == TipoArchivoProduccion.Finanzas && ext != ".xlsx"))
+        if (ext is not (".xlsx" or ".csv"))
             errores.Add(new(0, "Archivo", "El archivo debe ser XLSX (o CSV para la exportación del sistema)."));
         var ciclo = await db.Ciclos.FirstOrDefaultAsync(c => c.Id == s.CicloId);
         if (ciclo is null) errores.Add(new(0, "Ciclo", "Ciclo no encontrado."));
@@ -40,9 +40,11 @@ public class ProduccionService(
         try
         {
             using var ms = new MemoryStream(s.Contenido);
-            leido = s.TipoArchivo == TipoArchivoProduccion.Finanzas
-                ? ExcelPlanilla.LeerFormatoFinanzas(ms)
-                : ExcelPlanilla.LeerExportacion(ms, s.NombreArchivo);
+            // El formato se detecta por el contenido: una planilla de Finanzas (títulos en la fila 8) se lee como tal
+            // aunque se haya elegido "Exportación del sistema", y viceversa.
+            var esFinanzas = ext == ".xlsx" && ExcelPlanilla.EsFormatoFinanzas(ms);
+            ms.Position = 0;
+            leido = esFinanzas ? ExcelPlanilla.LeerFormatoFinanzas(ms) : ExcelPlanilla.LeerExportacion(ms, s.NombreArchivo);
         }
         catch (Exception)
         {
@@ -65,6 +67,8 @@ public class ProduccionService(
         var par = await parametros.ObtenerAsync();
         if (ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta) is { } aviso) avisos.Add(aviso);
         avisos.AddRange(validacion.Avisos);
+        if (leido.Encabezado?.Area is { Length: > 0 } areaArchivo && !areaArchivo.Equals(area!.Nombre, StringComparison.OrdinalIgnoreCase))
+            avisos.Add($"El archivo indica el área «{areaArchivo}» (B4), pero se cargó en {area.Nombre}.");
 
         var planilla = await db.Planillas.Include(p => p.Lineas).FirstOrDefaultAsync(p => p.CicloId == ciclo!.Id && p.AreaId == area!.Id);
         if (planilla is not null && planilla.Estado is not (PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta))
