@@ -54,8 +54,9 @@ public class CicloService(AppDbContext db, Parametros parametros, Auditor audito
     }
 
     /// <summary>Carga una planilla con todo lo necesario para las reglas.</summary>
-    public Task<Planilla?> PlanillaCompletaAsync(int id) =>
-        db.Planillas
+    /// <param name="todasLasAreas">Ignora el alcance por área del usuario (procesos que deben mantener la consistencia entre áreas).</param>
+    public Task<Planilla?> PlanillaCompletaAsync(int id, bool todasLasAreas = false) =>
+        (todasLasAreas ? db.Planillas.IgnoreQueryFilters() : db.Planillas)
             .Include(p => p.Ciclo).Include(p => p.Area)
             .Include(p => p.Lineas).ThenInclude(l => l.Prestador).ThenInclude(x => x.Cuentas)
             .Include(p => p.Lineas).ThenInclude(l => l.Job)

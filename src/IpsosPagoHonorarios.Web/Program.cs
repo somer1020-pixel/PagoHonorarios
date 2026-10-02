@@ -18,6 +18,8 @@ var cfg = builder.Configuration;
 var proveedor = cfg["Datos:Proveedor"] ?? "SqlServer";
 builder.Services.AddDbContext<AppDbContext>(o =>
 {
+    // El filtro por área de Planilla se propaga a propósito a líneas, boletas y observaciones (navegaciones requeridas).
+    o.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning));
     if (proveedor.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
         o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=App_Data/honorarios.db", s => s.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
     else

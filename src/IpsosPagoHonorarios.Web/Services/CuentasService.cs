@@ -135,7 +135,8 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
     /// <summary>Tras registrar o rechazar una cuenta: las alertas que ahora coinciden quedan resueltas (R-25).</summary>
     private async Task RevalidarPrestadorAsync(int prestadorId)
     {
-        var ids = await db.LineasPago
+        // La cuenta es del prestador: se revalida en todas las áreas, aunque el usuario solo gestione algunas.
+        var ids = await db.LineasPago.IgnoreQueryFilters()
             .Where(l => l.PrestadorId == prestadorId && l.Estado != LineaEstado.Diferida &&
                         (l.Planilla.Estado == PlanillaEstado.Borrador || l.Planilla.Estado == PlanillaEstado.ConAlertasCuenta ||
                          l.Planilla.Estado == PlanillaEstado.EnRevision || l.Planilla.Estado == PlanillaEstado.Observada))
@@ -143,7 +144,7 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
         var duenos = await DuenosAsync();
         foreach (var id in ids)
         {
-            var p = await ciclos.PlanillaCompletaAsync(id);
+            var p = await ciclos.PlanillaCompletaAsync(id, todasLasAreas: true);
             if (p is null) continue;
             var activas = p.Activas().ToList();
             foreach (var l in activas.Where(l => l.PrestadorId == prestadorId))

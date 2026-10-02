@@ -51,6 +51,19 @@ public class JobsModel(AppDbContext db, Auditor auditor) : PaginaBase
             await db.SaveChangesAsync();
         }, "Job guardado.", null, [Roles.Finanzas]);
 
+    /// <summary>Nueva área (p. ej. para CEX): luego el Administrador la asigna a los usuarios en Maestros → Usuarios.</summary>
+    public Task<IActionResult> OnPostAreaAsync(string nombreArea, string codigoArea) =>
+        AccionAsync(async () =>
+        {
+            nombreArea = nombreArea?.Trim() ?? "";
+            codigoArea = codigoArea?.Trim() ?? "";
+            if (nombreArea.Length == 0 || codigoArea.Length == 0) throw new ReglaException("Nombre y código del área son obligatorios (exactos al catálogo de Finanzas).");
+            if (await db.Areas.AnyAsync(a => a.Nombre == nombreArea)) throw new ReglaException("El área ya existe.");
+            db.Areas.Add(new Area { Nombre = nombreArea, CodigoArea = codigoArea });
+            auditor.Registrar(nameof(Area), nombreArea, "Crear área", codigoArea);
+            await db.SaveChangesAsync();
+        }, "Área agregada. Asígnala a los usuarios que la gestionan en Maestros → Usuarios.", null, [Roles.Finanzas]);
+
     public Task<IActionResult> OnPostGlosaAsync(string nombreGlosa, string item, string cuentaContable) =>
         AccionAsync(async () =>
         {

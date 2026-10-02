@@ -24,8 +24,12 @@ public class HistorialModel(AppDbContext db, Almacenamiento archivos) : PaginaBa
         }).ToList();
     }
 
+    /// <summary>El ZIP de cierre contiene todas las áreas: solo para quien ve todas (Finanzas, Administrador).</summary>
+    public bool PuedeZip => Alcance.VeTodas(User);
+
     public async Task<IActionResult> OnGetZipAsync(int cicloId)
     {
+        if (!PuedeZip) return Forbid();
         var c = await db.Ciclos.FirstOrDefaultAsync(x => x.Id == cicloId);
         if (c?.RutaZip is null || !archivos.Existe(c.RutaZip)) return NotFound();
         return File(archivos.Leer(c.RutaZip), "application/zip", $"Respaldos {c.Codigo}.zip");

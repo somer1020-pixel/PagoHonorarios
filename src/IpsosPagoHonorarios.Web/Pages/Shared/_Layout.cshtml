@@ -103,6 +103,10 @@
         {
             <div class="aviso aviso-danger" role="alert">@err</div>
         }
+        @if (interno && Alcance.Areas(User) is { Count: 0 })
+        {
+            <div class="aviso aviso-warning mb-3">No tienes áreas asignadas, por eso no ves planillas. Pide al Administrador que te asigne tus áreas en Maestros → Usuarios.</div>
+        }
         @RenderBody()
     </main>
 </div>

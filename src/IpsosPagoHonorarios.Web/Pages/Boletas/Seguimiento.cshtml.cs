@@ -43,7 +43,7 @@ public class SeguimientoModel(AppDbContext db, ContextoLayout ctx, CicloService 
 
     public async Task<IActionResult> OnGetPdfAsync(int boletaId)
     {
-        var b = await db.Boletas.FirstOrDefaultAsync(x => x.Id == boletaId);
+        var b = await db.Boletas.Include(x => x.Planilla).FirstOrDefaultAsync(x => x.Id == boletaId);   // filtro por área
         if (b is null || !archivos.Existe(b.RutaPdf)) return NotFound();
         return File(archivos.Leer(b.RutaPdf), "application/pdf", $"boleta_{b.NumeroBoleta ?? b.Id.ToString()}.pdf");
     }

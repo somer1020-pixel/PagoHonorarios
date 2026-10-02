@@ -1031,6 +1031,41 @@ COMMIT;
 GO
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002204034_UsuarioAreas'
+)
+BEGIN
+    CREATE TABLE [UsuarioAreas] (
+        [UsuarioId] nvarchar(450) NOT NULL,
+        [AreaId] int NOT NULL,
+        CONSTRAINT [PK_UsuarioAreas] PRIMARY KEY ([UsuarioId], [AreaId]),
+        CONSTRAINT [FK_UsuarioAreas_Areas_AreaId] FOREIGN KEY ([AreaId]) REFERENCES [Areas] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_UsuarioAreas_AspNetUsers_UsuarioId] FOREIGN KEY ([UsuarioId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002204034_UsuarioAreas'
+)
+BEGIN
+    CREATE INDEX [IX_UsuarioAreas_AreaId] ON [UsuarioAreas] ([AreaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002204034_UsuarioAreas'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261002204034_UsuarioAreas', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
 /* ---------- Datos iniciales ---------- */
 SET NOCOUNT ON;
 

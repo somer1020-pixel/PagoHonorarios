@@ -68,6 +68,11 @@ public class SemillaDemo(IServiceProvider sp, AppDbContext db, UserManager<Usuar
         // Glosa de MYSTERY SHOPPING pendiente de definición y Jobs.
         db.Glosas.Add(new Glosa { NombreGlosa = GlosaMs, Item = "TODO", CuentaContable = "TODO" });
         var areas = await db.Areas.ToDictionaryAsync(a => a.Nombre);
+        // Cada usuario de Operaciones ve solo las planillas de sus áreas.
+        foreach (var (mail, area) in new[] { ("andres.paredes@ejemplo.cl", "FACE TO FACE"), ("daniela.fuentes@ejemplo.cl", "MYSTERY SHOPPING"),
+                     ("felipe.araya@ejemplo.cl", "DATA PROCESSING"), ("felipe.araya@ejemplo.cl", "Operations CATI") })
+            if (areas.TryGetValue(area, out var a) && await users.FindByEmailAsync(mail) is { } u)
+                db.UsuarioAreas.Add(new UsuarioArea { UsuarioId = u.Id, AreaId = a.Id });
         foreach (var (id, n, a, v) in new[]
                  {
                      ("260041200105", "Hábitos de Consumo Hogar 2026", "FACE TO FACE", 6500m), ("260043100104", "Evaluación Transporte Urbano", "FACE TO FACE", 7200m),

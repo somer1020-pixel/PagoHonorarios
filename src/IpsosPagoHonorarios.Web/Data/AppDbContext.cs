@@ -13,6 +13,15 @@ public class Usuario : IdentityUser
     public bool Activo { get; set; } = true;
 }
 
+/// <summary>Áreas que gestiona un usuario de Operaciones (o CEX, Public, BHT, MSU, AUM): solo ve las planillas de esas áreas.</summary>
+public class UsuarioArea
+{
+    public string UsuarioId { get; set; } = "";
+    public Usuario Usuario { get; set; } = null!;
+    public int AreaId { get; set; }
+    public Area Area { get; set; } = null!;
+}
+
 public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual usuario, TimeProvider reloj)
     : IdentityDbContext<Usuario>(options)
 {
@@ -37,6 +46,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
     public DbSet<Parametro> Parametros => Set<Parametro>();
     public DbSet<TasaRetencion> TasasRetencion => Set<TasaRetencion>();
     public DbSet<CorreoSaliente> Correos => Set<CorreoSaliente>();
+    public DbSet<UsuarioArea> UsuarioAreas => Set<UsuarioArea>();
+
+    /// <summary>
+    /// Áreas visibles para el usuario actual; null = todas (Finanzas, Administrador, prestadores y procesos sin usuario).
+    /// Filtra todas las consultas de planillas (y, por la navegación, sus líneas, boletas y observaciones).
+    /// </summary>
+    public List<int>? AreasVisibles => Alcance.Areas(usuario.Principal);
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -72,6 +88,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
         m.Entity<Planilla>(e =>
         {
             e.HasIndex(x => new { x.CicloId, x.AreaId }).IsUnique();
+            e.HasQueryFilter(x => AreasVisibles == null || AreasVisibles.Contains(x.AreaId));
             e.HasMany(x => x.Lineas).WithOne(x => x.Planilla).HasForeignKey(x => x.PlanillaId);
             e.HasMany(x => x.Boletas).WithOne(x => x.Planilla).HasForeignKey(x => x.PlanillaId);
             e.HasMany(x => x.Devoluciones).WithOne(x => x.Planilla).HasForeignKey(x => x.PlanillaId);
@@ -122,6 +139,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
         m.Entity<Observacion>(e => { e.Property(x => x.Campo).HasMaxLength(100); e.Property(x => x.Detalle).HasMaxLength(1000); });
         m.Entity<Transferencia>(e => { e.HasIndex(x => x.BoletaId).IsUnique(); e.Property(x => x.NumeroOperacion).HasMaxLength(50); });
         m.Entity<TasaRetencion>(e => { e.HasIndex(x => x.Anio).IsUnique(); e.Property(x => x.Tasa).HasPrecision(9, 4); });
+        m.Entity<UsuarioArea>(e =>
+        {
+            e.HasKey(x => new { x.UsuarioId, x.AreaId });
+            e.HasOne(x => x.Usuario).WithMany().HasForeignKey(x => x.UsuarioId);
+            e.HasOne(x => x.Area).WithMany().HasForeignKey(x => x.AreaId);
+        });
         m.Entity<Auditoria>(e => { e.HasIndex(x => x.Fecha); e.Property(x => x.Entidad).HasMaxLength(60); e.Property(x => x.Accion).HasMaxLength(100); });
     }
 

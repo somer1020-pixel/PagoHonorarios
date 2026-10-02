@@ -31,7 +31,8 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     {
         await ctx.CargarAsync();
         Ciclo = ctx.Ciclo;
-        Areas = await db.Areas.OrderBy(a => a.Nombre).ToListAsync();
+        var visibles = db.AreasVisibles;
+        Areas = await db.Areas.Where(a => visibles == null || visibles.Contains(a.Id)).OrderBy(a => a.Nombre).ToListAsync();
         TiposGasto = await db.TiposGasto.OrderBy(t => t.Id).Select(t => t.Nombre).ToListAsync();
         var par = await parametros.ObtenerAsync();
         AvisoVentana = ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta);

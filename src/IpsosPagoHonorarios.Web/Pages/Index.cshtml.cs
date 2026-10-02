@@ -41,7 +41,9 @@ public class IndexModel(AppDbContext db, ContextoLayout ctx, Parametros parametr
         await ctx.CargarAsync();
         Ciclo = ctx.Ciclo;
         Devolucion = ctx.DevolucionActiva;
-        Bitacora = await db.Auditorias.OrderByDescending(a => a.Id).Take(8).ToListAsync();
+        // La bitácora general mezcla todas las áreas: quien gestiona solo algunas ve su propia actividad.
+        var propio = Alcance.VeTodas(User) ? null : User.FindFirst("nombre")?.Value;
+        Bitacora = await db.Auditorias.Where(a => propio == null || a.Usuario == propio).OrderByDescending(a => a.Id).Take(8).ToListAsync();
         if (Ciclo is null) return;
         Planillas = await db.Planillas.Where(p => p.CicloId == Ciclo.Id).Include(p => p.Area).Include(p => p.Lineas).Include(p => p.Boletas)
             .AsSplitQuery().OrderBy(p => p.Area.Nombre).ToListAsync();

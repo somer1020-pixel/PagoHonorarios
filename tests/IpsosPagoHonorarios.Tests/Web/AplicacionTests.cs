@@ -220,11 +220,11 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         var prestadores = sp.GetRequiredService<PrestadoresService>();
         var db = sp.GetRequiredService<AppDbContext>();
 
-        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("no-es-correo", "X", Roles.Finanzas, "https://h"));
-        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("nuevo@ejemplo.cl", "X", Roles.Prestador, "https://h"));
-        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("carolina.diaz@ejemplo.cl", "X", Roles.Finanzas, "https://h"));
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("no-es-correo", "X", Roles.Finanzas, null, "https://h"));
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("nuevo@ejemplo.cl", "X", Roles.Prestador, null, "https://h"));
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync("carolina.diaz@ejemplo.cl", "X", Roles.Finanzas, null, "https://h"));
 
-        var enlace = await usuarios.CrearAsync("nuevo@ejemplo.cl", "Usuario Nuevo", Roles.Finanzas, "https://h");
+        var enlace = await usuarios.CrearAsync("nuevo@ejemplo.cl", "Usuario Nuevo", Roles.Finanzas, null, "https://h");
         Assert.StartsWith("https://h/Cuenta/Activar?u=nuevo%40ejemplo.cl&t=", enlace);
         Assert.Contains(await db.Correos.ToListAsync(), c => c.Para == "nuevo@ejemplo.cl" && c.Cuerpo.Contains(enlace));
         var nuevo = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "nuevo@ejemplo.cl");
@@ -237,7 +237,9 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.Equal("/", (await IngresarAsync(c, "nuevo@ejemplo.cl", "clave1234")).Headers.Location!.OriginalString);
         Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/Finanzas/Revision")).StatusCode);
 
-        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo Editado", Roles.Operaciones);
+        var f2f = await db.Areas.SingleAsync(a => a.Nombre == "FACE TO FACE");
+        Assert.Contains("al menos un área", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.EditarAsync(nuevo.Usuario.Id, "X", Roles.Operaciones, null))).Message);
+        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo Editado", Roles.Operaciones, [f2f.Id]);
         var editado = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "nuevo@ejemplo.cl");
         Assert.Equal((Roles.Operaciones, "Usuario Nuevo Editado"), (editado.Perfil, editado.Usuario.NombreCompleto));
         Assert.True(editado.Activado);
@@ -252,12 +254,12 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         // Resguardos: no se deja el sistema sin Administrador activo; los prestadores no se administran aquí.
         var admin = (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == "admin@ejemplo.cl");
         Assert.Contains("único Administrador", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.CambiarActivoAsync(admin.Usuario.Id, false))).Message);
-        Assert.Contains("único Administrador", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.EditarAsync(admin.Usuario.Id, "Admin", Roles.Finanzas))).Message);
+        Assert.Contains("único Administrador", (await Assert.ThrowsAsync<ReglaException>(() => usuarios.EditarAsync(admin.Usuario.Id, "Admin", Roles.Finanzas, null))).Message);
         var prestador = await db.Users.FirstAsync(u => u.PrestadorId != null);
         await Assert.ThrowsAsync<ReglaException>(() => usuarios.CambiarActivoAsync(prestador.Id, false));
 
         // Por la página: el Administrador no puede desactivarse a sí mismo (aunque exista otro Administrador).
-        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo", Roles.Admin);
+        await usuarios.EditarAsync(nuevo.Usuario.Id, "Usuario Nuevo", Roles.Admin, null);
         var r = await adm.PostAsync("/Maestros/Usuarios?handler=Activo", new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["id"] = admin.Usuario.Id, ["activo"] = "false", ["__RequestVerificationToken"] = await TokenAsync(adm, "/Maestros/Usuarios")
@@ -276,7 +278,9 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         var sp = scope.ServiceProvider;
         var usuarios = sp.GetRequiredService<UsuariosService>();
         var email = $"{perfil.ToLowerInvariant()}@ejemplo.cl";
-        var enlace = await usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, "https://h");
+        var areaId = (await sp.GetRequiredService<AppDbContext>().Areas.SingleAsync(a => a.Nombre == "DATA PROCESSING")).Id;
+        await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, null, "https://h"));   // requiere área
+        var enlace = await usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, [areaId], "https://h");
         var token = Uri.UnescapeDataString(enlace.Split("&t=")[1]);
         Assert.True((await sp.GetRequiredService<PrestadoresService>().DefinirContrasenaAsync(email, token, "clave1234", activacion: true)).Succeeded);
         Assert.Equal(perfil, (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == email).Perfil);
@@ -296,5 +300,64 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Denegado(await c.GetAsync("/Finanzas/Pagos"));
         Denegado(await c.GetAsync("/Maestros/Usuarios"));
         Assert.Contains($"<span class=\"rol-top\">{perfil}</span>", await c.GetStringAsync("/"));   // el encabezado muestra el perfil específico
+    }
+
+    [Fact]
+    public async Task Operaciones_SoloVeLasPlanillasDeSusAreas()
+    {
+        using var scope = app.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<AppDbContext>();
+        var oct = await db.Ciclos.SingleAsync(c => c.Codigo == "OCT-2026");
+        var planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == oct.Id).ToDictionaryAsync(p => p.Area.Nombre);
+        var f2f = planillas["FACE TO FACE"];
+        var dp = planillas["DATA PROCESSING"];
+        var boletaDp = await db.Boletas.FirstAsync(b => b.PlanillaId == dp.Id);
+
+        var andres = Cliente();   // Operaciones · FACE TO FACE
+        await IngresarAsync(andres, "andres.paredes@ejemplo.cl");
+        var panel = await andres.GetStringAsync("/?ciclo=OCT-2026");
+        Assert.Contains("FACE TO FACE", panel);
+        Assert.DoesNotContain("DATA PROCESSING", panel);
+        Assert.DoesNotContain("MYSTERY SHOPPING", panel);
+        Assert.Contains("Tu actividad reciente", panel);
+        Assert.Contains("FACE TO FACE", await andres.GetStringAsync($"/Ciclos/Planilla?id={f2f.Id}"));
+        Assert.DoesNotContain("DATA PROCESSING", await andres.GetStringAsync($"/Ciclos/Planilla?id={dp.Id}"));
+        Assert.Equal(HttpStatusCode.NotFound, (await andres.GetAsync($"/Ciclos/Planilla?handler=Xlsx&id={dp.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await andres.GetAsync($"/Ciclos/Planilla?handler=Xlsx&id={f2f.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await andres.GetAsync($"/Boletas/Seguimiento?handler=Pdf&boletaId={boletaDp.Id}")).StatusCode);
+        Assert.DoesNotContain("DATA PROCESSING", await andres.GetStringAsync($"/Boletas/Seguimiento?planilla={dp.Id}"));
+        Assert.DoesNotContain("<option value=\"" + dp.AreaId + "\"", await andres.GetStringAsync("/Ciclos/Produccion"));
+        Denegado(await andres.GetAsync($"/Ciclos/Historial?handler=Zip&cicloId={oct.Id}"));
+
+        var felipe = Cliente();   // Operaciones · DATA PROCESSING y Operations CATI
+        await IngresarAsync(felipe, "felipe.araya@ejemplo.cl");
+        var panelFelipe = await felipe.GetStringAsync("/?ciclo=OCT-2026");
+        Assert.Contains("DATA PROCESSING", panelFelipe);
+        Assert.DoesNotContain("FACE TO FACE", panelFelipe);
+
+        var fin = Cliente();      // Finanzas ve todas
+        await IngresarAsync(fin, "carolina.diaz@ejemplo.cl");
+        var panelFin = await fin.GetStringAsync("/?ciclo=OCT-2026");
+        Assert.Contains("FACE TO FACE", panelFin);
+        Assert.Contains("DATA PROCESSING", panelFin);
+        Assert.Contains("MYSTERY SHOPPING", panelFin);
+
+        // Servicios con la identidad de Andrés: la planilla de otra área no existe para él y no puede cargar producción en ella.
+        var users = sp.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Usuario>>();
+        var principal = await sp.GetRequiredService<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<Usuario>>()
+            .CreateAsync((await users.FindByEmailAsync("andres.paredes@ejemplo.cl"))!);
+        Assert.Equal([f2f.AreaId], Alcance.Areas(principal));
+        using var scope2 = app.Services.CreateScope();
+        scope2.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>().HttpContext =
+            new Microsoft.AspNetCore.Http.DefaultHttpContext { User = principal, RequestServices = scope2.ServiceProvider };
+        var ciclos = scope2.ServiceProvider.GetRequiredService<CicloService>();
+        Assert.Null(await ciclos.PlanillaCompletaAsync(dp.Id));
+        Assert.NotNull(await ciclos.PlanillaCompletaAsync(f2f.Id));
+        Assert.NotNull(await ciclos.PlanillaCompletaAsync(dp.Id, todasLasAreas: true));
+        var r = await scope2.ServiceProvider.GetRequiredService<ProduccionService>().ImportarAsync(new SolicitudImportacion(oct.Id, dp.AreaId, "Costo Directo",
+            "Andrés Paredes", "andres.paredes@ejemplo.cl", TipoArchivoProduccion.Exportacion, "x.csv", "a;b"u8.ToArray()));
+        Assert.False(r.Cargada);
+        Assert.Contains(r.Errores, e => e.Campo == "Área" && e.Motivo.Contains("No tienes asignada"));
     }
 }

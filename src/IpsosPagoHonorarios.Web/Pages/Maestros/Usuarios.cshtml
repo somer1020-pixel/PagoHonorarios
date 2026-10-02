@@ -31,7 +31,16 @@
                 @foreach (var p in UsuariosService.Perfiles) { <option value="@p">@UsuariosService.NombrePerfil(p)</option> }
             </select></div>
     </div>
-    <p class="m-0 text-12 muted">La persona recibe un enlace para definir su propia contraseña: el Administrador nunca la conoce.</p>
+    <fieldset class="areas-usuario" data-perfil="up">
+        <legend class="form-label">Áreas que gestiona (ve solo las planillas de estas áreas)</legend>
+        <div class="d-flex flex-wrap gap-3">
+            @foreach (var a in Model.Areas)
+            {
+                <label class="d-flex gap-2 align-items-center text-13"><input type="checkbox" name="areas" value="@a.Id" /> @a.Nombre</label>
+            }
+        </div>
+    </fieldset>
+    <p class="m-0 text-12 muted">Finanzas y Administrador ven todas las áreas. La persona recibe un enlace para definir su propia contraseña: el Administrador nunca la conoce.</p>
     <button class="btn btn-primary align-self-start">Crear usuario</button>
 </form>
 @if (s is not null)
@@ -46,6 +55,15 @@
                 <select id="ep" name="perfil" class="form-select form-select-sm">
                     @foreach (var p in UsuariosService.Perfiles) { <option value="@p" selected="@(p == s.Perfil)">@UsuariosService.NombrePerfil(p)</option> }
                 </select></div>
+            <fieldset class="areas-usuario w-100" data-perfil="ep">
+                <legend class="form-label">Áreas que gestiona</legend>
+                <div class="d-flex flex-wrap gap-3">
+                    @foreach (var a in Model.Areas)
+                    {
+                        <label class="d-flex gap-2 align-items-center text-13"><input type="checkbox" name="areas" value="@a.Id" checked="@(s.Areas.Any(x => x.Id == a.Id))" /> @a.Nombre</label>
+                    }
+                </div>
+            </fieldset>
             <button class="btn btn-primary btn-sm">Guardar</button>
             <a class="btn btn-ghost btn-sm" href="/Maestros/Usuarios">Cerrar</a>
         </form>
@@ -65,7 +83,7 @@
 }
 <div class="tarjeta tabla">
     <table class="table">
-        <thead><tr><th>Nombre</th><th>Correo (usuario)</th><th>Perfil</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Correo (usuario)</th><th>Perfil</th><th>Áreas</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead>
         <tbody>
         @foreach (var x in Model.Lista)
         {
@@ -73,6 +91,7 @@
                 <td>@x.Usuario.NombreCompleto @if (x.Usuario.Id == Model.MiId) { <span class="text-12 muted">(tú)</span> }</td>
                 <td class="mono text-12">@x.Usuario.Email</td>
                 <td>@UsuariosService.NombrePerfil(x.Perfil)</td>
+                <td class="text-12">@if (!x.PorArea) { <span class="muted">Todas</span> } else if (x.Areas.Count == 0) { @Badge.Html(Tono.Warning, "Sin áreas") } else { @string.Join(", ", x.Areas.Select(a => a.Nombre)) }</td>
                 <td>
                     @if (!x.Usuario.Activo) { @Badge.Html(Tono.Neutral, "Desactivado") }
                     else if (x.Bloqueado) { @Badge.Html(Tono.Danger, "Bloqueado") }
@@ -87,3 +106,12 @@
     </table>
 </div>
 <p class="m-0 text-12 muted">Los prestadores no aparecen aquí: su acceso al portal se gestiona en Maestros / Prestadores.</p>
+<p class="m-0 text-12 muted">¿Falta un área (por ejemplo, de CEX)? Créala en <a href="/Maestros/Jobs">Maestros → Jobs y glosas</a>.</p>
+<script>
+    // Las áreas solo aplican a Operaciones y perfiles equivalentes (CEX, Public, BHT, MSU, AUM).
+    document.querySelectorAll('fieldset.areas-usuario').forEach(f => {
+        const sel = document.getElementById(f.dataset.perfil);
+        const ver = () => { const no = ['Finanzas', 'Admin'].includes(sel.value); f.hidden = no; f.disabled = no; };
+        sel.addEventListener('change', ver); ver();
+    });
+</script>

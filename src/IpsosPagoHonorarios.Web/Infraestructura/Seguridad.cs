@@ -3,7 +3,9 @@ using System.Text.Json;
 using IpsosPagoHonorarios.Core;
 using IpsosPagoHonorarios.Web.Data;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using IpsosPagoHonorarios.Web.Services;
 
 namespace IpsosPagoHonorarios.Web.Infraestructura;
 
@@ -20,7 +22,7 @@ public class OpcionesPublicacion
 }
 
 /// <summary>Agrega el nombre completo y el prestador asociado a la identidad.</summary>
-public class FabricaClaims(UserManager<Usuario> users, RoleManager<IdentityRole> roles, IOptions<IdentityOptions> op)
+public class FabricaClaims(UserManager<Usuario> users, RoleManager<IdentityRole> roles, IOptions<IdentityOptions> op, AppDbContext db)
     : UserClaimsPrincipalFactory<Usuario, IdentityRole>(users, roles, op)
 {
     protected override async Task<ClaimsIdentity> GenerateClaimsAsync(Usuario u)
@@ -31,6 +33,10 @@ public class FabricaClaims(UserManager<Usuario> users, RoleManager<IdentityRole>
         // CEX, Public, BHT, MSU y AUM operan como Operaciones: mismas pantallas y permisos.
         if (Roles.ComoOperaciones.Any(r => id.HasClaim(id.RoleClaimType, r)) && !id.HasClaim(id.RoleClaimType, Roles.Operaciones))
             id.AddClaim(new Claim(id.RoleClaimType, Roles.Operaciones));
+        // Áreas que gestiona (alcance de las planillas visibles para los perfiles operativos).
+        if (id.HasClaim(id.RoleClaimType, Roles.Operaciones))
+            foreach (var a in await db.UsuarioAreas.Where(x => x.UsuarioId == u.Id).Select(x => x.AreaId).ToListAsync())
+                id.AddClaim(new Claim(Alcance.ClaimArea, a.ToString()));
         return id;
     }
 }

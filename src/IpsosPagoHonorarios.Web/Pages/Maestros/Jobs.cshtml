@@ -66,7 +66,16 @@
         }
     </div>
     <div class="campos-2">
-        <div class="tarjeta"><span class="kicker">Áreas</span><span class="text-13">@foreach (var a in Model.Areas) { <span>@a.Nombre <span class="mono">@a.CodigoArea</span></span><br /> }</span></div>
+        <div class="tarjeta"><span class="kicker">Áreas</span><span class="text-13">@foreach (var a in Model.Areas) { <span>@a.Nombre <span class="mono">@a.CodigoArea</span></span><br /> }</span>
+            @if (Model.PuedeMantener)
+            {
+                <form method="post" asp-page-handler="Area" class="d-flex flex-wrap gap-2 align-items-end">
+                    <div><label class="form-label" for="an">Nueva área</label><input id="an" name="nombreArea" class="form-control form-control-sm" required /></div>
+                    <div><label class="form-label" for="ac">Código</label><input id="ac" name="codigoArea" class="form-control form-control-sm mono" style="width:90px" required /></div>
+                    <button class="btn btn-secondary btn-sm">Agregar área</button>
+                </form>
+            }
+        </div>
         <div class="tarjeta"><span class="kicker">Bancos</span><span class="text-13">@string.Join(" · ", Model.Bancos.Select(b => $"{b.Nombre} {(string.IsNullOrEmpty(b.CodigoBanco) ? "—" : b.CodigoBanco)}"))</span>
             <span class="text-12" style="color:var(--warning)">TODO(diseño): BANEFE y SANTANDER comparten código 37; faltan códigos de algunos bancos.</span></div>
         <div class="tarjeta"><span class="kicker">Tipos de cuenta</span><span class="text-13">@string.Join(" · ", Model.Tipos.Select(t => t.Nombre))</span></div>

@@ -31,6 +31,22 @@ public class UsuarioFijo(string nombre) : IUsuarioActual
     public ClaimsPrincipal? Principal { get; set; }
 }
 
+/// <summary>Alcance por área: Operaciones y los perfiles equivalentes ven solo las planillas de sus áreas asignadas.</summary>
+public static class Alcance
+{
+    public const string ClaimArea = "area";
+
+    /// <summary>null = todas las áreas. Lista vacía = ninguna (usuario operativo sin áreas asignadas).</summary>
+    public static List<int>? Areas(ClaimsPrincipal? p)
+    {
+        if (p?.Identity?.IsAuthenticated != true) return null;
+        if (p.IsInRole(Roles.Finanzas) || p.IsInRole(Roles.Admin) || !p.IsInRole(Roles.Operaciones)) return null;
+        return p.FindAll(ClaimArea).Select(c => int.TryParse(c.Value, out var id) ? id : 0).Where(id => id > 0).ToList();
+    }
+
+    public static bool VeTodas(ClaimsPrincipal? p) => Areas(p) is null;
+}
+
 public class OpcionesAlmacenamiento
 {
     /// <summary>TODO(diseño): ruta, retención y respaldo de PDFs y ZIPs.</summary>

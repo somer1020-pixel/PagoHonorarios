@@ -106,7 +106,7 @@ else
     </div>
 }
 <div class="tarjeta compacta">
-    <h2>Bitácora reciente</h2>
+    <h2>@(Alcance.VeTodas(User) ? "Bitácora reciente" : "Tu actividad reciente")</h2>
     <ul class="list-unstyled m-0 d-flex flex-column gap-2 text-13">
         @foreach (var a in Model.Bitacora)
         {

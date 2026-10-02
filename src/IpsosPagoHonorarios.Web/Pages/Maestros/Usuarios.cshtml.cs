@@ -1,4 +1,5 @@
 using IpsosPagoHonorarios.Core;
+using Microsoft.EntityFrameworkCore;
 using IpsosPagoHonorarios.Web.Infraestructura;
 using IpsosPagoHonorarios.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -8,27 +9,29 @@ namespace IpsosPagoHonorarios.Web.Pages.Maestros;
 
 /// <summary>Usuarios internos (Operaciones, Finanzas, Administrador): solo el Administrador.</summary>
 [Authorize(Roles = Roles.Admin)]
-public class UsuariosModel(UsuariosService usuarios) : PaginaBase
+public class UsuariosModel(UsuariosService usuarios, Data.AppDbContext db) : PaginaBase
 {
     [BindProperty(SupportsGet = true)] public string? Editar { get; set; }
     [TempData] public string? Enlace { get; set; }
     [TempData] public string? EnlacePara { get; set; }
     public List<UsuariosService.UsuarioInterno> Lista { get; set; } = [];
     public UsuariosService.UsuarioInterno? Sel { get; set; }
+    public List<Area> Areas { get; set; } = [];
     public string? MiId => User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
     public async Task OnGetAsync()
     {
         Lista = await usuarios.ListarAsync();
+        Areas = await db.Areas.OrderBy(a => a.Nombre).ToListAsync();
         Sel = Lista.FirstOrDefault(x => x.Usuario.Id == Editar);
     }
 
-    public Task<IActionResult> OnPostCrearAsync(string? email, string? nombre, string? perfil) =>
-        AccionAsync(async () => { Enlace = await usuarios.CrearAsync(email, nombre, perfil, BaseUrl); EnlacePara = email?.Trim(); },
+    public Task<IActionResult> OnPostCrearAsync(string? email, string? nombre, string? perfil, int[]? areas) =>
+        AccionAsync(async () => { Enlace = await usuarios.CrearAsync(email, nombre, perfil, areas, BaseUrl); EnlacePara = email?.Trim(); },
             "Usuario creado. Se envió el enlace de activación por correo (72 horas); también puedes copiarlo abajo.", null, [Roles.Admin]);
 
-    public Task<IActionResult> OnPostEditarAsync(string id, string? nombre, string? perfil) =>
-        AccionAsync(() => usuarios.EditarAsync(id, nombre, perfil), "Usuario actualizado.", null, [Roles.Admin]);
+    public Task<IActionResult> OnPostEditarAsync(string id, string? nombre, string? perfil, int[]? areas) =>
+        AccionAsync(() => usuarios.EditarAsync(id, nombre, perfil, areas), "Usuario actualizado.", null, [Roles.Admin]);
 
     public Task<IActionResult> OnPostActivoAsync(string id, bool activo) =>
         AccionAsync(() => usuarios.CambiarActivoAsync(id, activo), activo ? "Usuario reactivado." : "Usuario desactivado: ya no puede ingresar.", null, [Roles.Admin]);

@@ -26,6 +26,8 @@ public class ProduccionService(
             errores.Add(new(0, "Correo del responsable", "Ingresa un correo válido."));
         var area = await db.Areas.FirstOrDefaultAsync(a => a.Id == s.AreaId);
         if (area is null) errores.Add(new(0, "Área", "El área responsable es obligatoria."));
+        else if (db.AreasVisibles is { } visibles && !visibles.Contains(area.Id))
+            errores.Add(new(0, "Área", $"No tienes asignada el área {area.Nombre}. Pide al Administrador que te la asigne."));
         var tiposGasto = await db.TiposGasto.Select(t => t.Nombre).ToListAsync();
         if (!tiposGasto.Contains(s.TipoGasto)) errores.Add(new(0, "Tipo de gasto", "El tipo de gasto es obligatorio."));
         var ext = Path.GetExtension(s.NombreArchivo).ToLowerInvariant();
