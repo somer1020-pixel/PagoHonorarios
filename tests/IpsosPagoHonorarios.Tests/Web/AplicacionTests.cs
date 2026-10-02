@@ -151,6 +151,16 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
             Assert.Equal(HttpStatusCode.OK, (await fin.GetAsync(ruta)).StatusCode);
         var xlsx = await fin.GetAsync("/Ciclos/Planilla?handler=Xlsx&id=1");
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsx.Content.Headers.ContentType!.MediaType);
+
+        // Revisión de Finanzas: descarga en Excel de la planilla enviada.
+        Assert.Contains("Descargar planilla enviada", await fin.GetStringAsync("/Finanzas/Revision?planilla=1"));
+        var enviada = await fin.GetAsync("/Finanzas/Revision?handler=Xlsx&planilla=1");
+        Assert.Equal(HttpStatusCode.OK, enviada.StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", enviada.Content.Headers.ContentType!.MediaType);
+        Assert.EndsWith(".xlsx", enviada.Content.Headers.ContentDisposition!.FileNameStar ?? enviada.Content.Headers.ContentDisposition.FileName!.Trim('"'));
+        using var libro = new ClosedXML.Excel.XLWorkbook(new MemoryStream(await enviada.Content.ReadAsByteArrayAsync()));
+        Assert.NotEmpty(libro.Worksheets);
+        Denegado(await ops.GetAsync("/Finanzas/Revision?handler=Xlsx&planilla=1"));
     }
 
     [Fact]

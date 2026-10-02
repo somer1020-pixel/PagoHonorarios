@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace IpsosPagoHonorarios.Web.Pages.Finanzas;
 
 [Authorize(Roles = $"{Roles.Finanzas},{Roles.Admin}")]
-public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos, RevisionService revision, CuentasService cuentas) : PaginaBase
+public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos, RevisionService revision, CuentasService cuentas, ExcelPlanilla excel, Almacenamiento almacen) : PaginaBase
 {
     [BindProperty(SupportsGet = true)] public int? Planilla { get; set; }
     [BindProperty(SupportsGet = true)] public int? Prestador { get; set; }
@@ -19,6 +19,9 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
     public List<Observacion> Observaciones { get; set; } = [];
     public Verificacion? Aprobacion { get; set; }
     public ChequeosPrestador? Sel { get; set; }
+    /// <summary>XLSX enviado a Finanzas (última versión archivada) y archivo original subido por Operaciones.</summary>
+    public PlanillaArchivo? Enviada { get; set; }
+    public PlanillaArchivo? Original { get; set; }
 
     public async Task OnGetAsync()
     {
@@ -31,6 +34,9 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
         if (P is null) return;
         Planilla = P.Id;
         Observaciones = await ciclos.ObservacionesAsync(P.Id);
+        var docs = await db.PlanillaArchivos.AsNoTracking().Where(a => a.PlanillaId == P.Id).OrderByDescending(a => a.Version).ThenByDescending(a => a.Id).ToListAsync();
+        Enviada = docs.FirstOrDefault(a => a.Tipo == "Planilla");
+        Original = docs.FirstOrDefault(a => a.Tipo == "Original");
         Chequeos = P.Activas().GroupBy(l => l.PrestadorId).OrderBy(g => g.Min(l => l.Numero)).Select(g => Flujo.Revisar(P, g.Key)).ToList();
         Aprobacion = Flujo.PuedeAprobar(P, Observaciones);
         Sel = Chequeos.FirstOrDefault(c => c.PrestadorId == Prestador)
@@ -47,6 +53,26 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
         if (c.Bancaria == Chequeo.Pendiente) return (Tono.Warning, "Cuenta por validar");
         var e = lineas[0].Estado;
         return (e is LineaEstado.Aprobada or LineaEstado.Pagada ? Tono.Success : e == LineaEstado.PendienteBoleta ? Tono.Neutral : Tono.Info, e.Nombre());
+    }
+
+    private const string TipoXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    /// <summary>
+    /// Descarga en Excel de la planilla enviada a Finanzas: el XLSX archivado al enviar (o reenviar) la versión. Con
+    /// <paramref name="archivoId"/> descarga ese archivo (p. ej. el original subido); sin archivo archivado, la genera.
+    /// </summary>
+    public async Task<IActionResult> OnGetXlsxAsync(int? archivoId)
+    {
+        var id = Planilla ?? 0;
+        var docs = db.PlanillaArchivos.AsNoTracking().Where(a => a.PlanillaId == id && a.Tipo != "Nomina");
+        var doc = archivoId is null
+            ? await docs.Where(a => a.Tipo == "Planilla").OrderByDescending(a => a.Version).ThenByDescending(a => a.Id).FirstOrDefaultAsync()
+            : await docs.FirstOrDefaultAsync(a => a.Id == archivoId);
+        if (doc is not null && almacen.Existe(doc.Ruta)) return File(almacen.Leer(doc.Ruta), TipoXlsx, doc.NombreArchivo);
+        if (archivoId is not null) return NotFound();
+        var p = await ciclos.PlanillaCompletaAsync(id);
+        if (p is null) return NotFound();
+        return File(await excel.ExportarAsync(p), TipoXlsx, Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Area.Nombre, p.Version));
     }
 
     private object Ruta => new { planilla = Planilla, prestador = Prestador };

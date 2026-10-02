@@ -12,7 +12,15 @@
         <h1>Revisión</h1>
         <div class="rol">Rol: Finanzas</div>
     </div>
-    @if (p is not null) { @Badge.De(p.Estado) }
+    @if (p is not null)
+    {
+        @Badge.De(p.Estado)
+        <a class="btn btn-secondary" href="?handler=Xlsx&planilla=@p.Id" title="@(Model.Enviada?.NombreArchivo ?? "Se genera con los datos actuales")">Descargar planilla enviada (XLSX@(Model.Enviada is null ? "" : $" v{Model.Enviada.Version}"))</a>
+        @if (Model.Original is not null)
+        {
+            <a class="btn btn-ghost" href="?handler=Xlsx&planilla=@p.Id&archivoId=@Model.Original.Id" title="@Model.Original.NombreArchivo">Archivo original</a>
+        }
+    }
 </div>
 <partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
 @if (p is null)
