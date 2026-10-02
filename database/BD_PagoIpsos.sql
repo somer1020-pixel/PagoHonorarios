@@ -1066,6 +1066,27 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002205056_AreaPerfil'
+)
+BEGIN
+    ALTER TABLE [Areas] ADD [Perfil] nvarchar(40) NOT NULL DEFAULT N'Operaciones';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002205056_AreaPerfil'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261002205056_AreaPerfil', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
 /* ---------- Datos iniciales ---------- */
 SET NOCOUNT ON;
 

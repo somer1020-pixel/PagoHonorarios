@@ -66,12 +66,14 @@
         }
     </div>
     <div class="campos-2">
-        <div class="tarjeta"><span class="kicker">Áreas</span><span class="text-13">@foreach (var a in Model.Areas) { <span>@a.Nombre <span class="mono">@a.CodigoArea</span></span><br /> }</span>
+        <div class="tarjeta"><span class="kicker">Áreas (por perfil)</span><span class="text-13">@foreach (var g in Model.Areas.GroupBy(a => a.Perfil).OrderBy(g => Array.IndexOf(Roles.Internos, g.Key))) { <strong>@g.Key</strong><br />@foreach (var a in g) { <span>@a.Nombre <span class="mono">@a.CodigoArea</span></span><br /> } }</span>
             @if (Model.PuedeMantener)
             {
                 <form method="post" asp-page-handler="Area" class="d-flex flex-wrap gap-2 align-items-end">
                     <div><label class="form-label" for="an">Nueva área</label><input id="an" name="nombreArea" class="form-control form-control-sm" required /></div>
                     <div><label class="form-label" for="ac">Código</label><input id="ac" name="codigoArea" class="form-control form-control-sm mono" style="width:90px" required /></div>
+                    <div><label class="form-label" for="ap">Perfil</label>
+                        <select id="ap" name="perfilArea" class="form-select form-select-sm">@foreach (var p in Roles.Internos.Where(UsuariosService.PerfilPorArea)) { <option value="@p">@p</option> }</select></div>
                     <button class="btn btn-secondary btn-sm">Agregar área</button>
                 </form>
             }

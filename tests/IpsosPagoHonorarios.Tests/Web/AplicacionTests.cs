@@ -278,8 +278,15 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         var sp = scope.ServiceProvider;
         var usuarios = sp.GetRequiredService<UsuariosService>();
         var email = $"{perfil.ToLowerInvariant()}@ejemplo.cl";
-        var areaId = (await sp.GetRequiredService<AppDbContext>().Areas.SingleAsync(a => a.Nombre == "DATA PROCESSING")).Id;
+        var dbp = sp.GetRequiredService<AppDbContext>();
+        var deOperaciones = (await dbp.Areas.SingleAsync(a => a.Nombre == "DATA PROCESSING")).Id;
+        var area = new Area { Nombre = $"Área {perfil}", CodigoArea = "99" + perfil.Length, Perfil = perfil };
+        dbp.Areas.Add(area);
+        await dbp.SaveChangesAsync();
+        var areaId = area.Id;
         await Assert.ThrowsAsync<ReglaException>(() => usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, null, "https://h"));   // requiere área
+        Assert.Contains("pertenece al perfil Operaciones", (await Assert.ThrowsAsync<ReglaException>(() =>
+            usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, [deOperaciones], "https://h"))).Message);   // solo áreas de su perfil
         var enlace = await usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, [areaId], "https://h");
         var token = Uri.UnescapeDataString(enlace.Split("&t=")[1]);
         Assert.True((await sp.GetRequiredService<PrestadoresService>().DefinirContrasenaAsync(email, token, "clave1234", activacion: true)).Succeeded);

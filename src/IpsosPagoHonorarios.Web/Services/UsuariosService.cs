@@ -151,6 +151,8 @@ public class UsuariosService(AppDbContext db, UserManager<Usuario> users, Audito
         if (!PerfilPorArea(perfil)) return [];
         var ids = (areaIds ?? []).Distinct().ToList();
         var areas = await db.Areas.Where(a => ids.Contains(a.Id)).OrderBy(a => a.Nombre).ToListAsync();
+        if (areas.FirstOrDefault(a => a.Perfil != perfil) is { } ajena)
+            throw new ReglaException($"El área {ajena.Nombre} pertenece al perfil {NombrePerfil(ajena.Perfil)}, no a {NombrePerfil(perfil)}.");
         if (areas.Count == 0) throw new ReglaException($"Asigna al menos un área: el perfil {NombrePerfil(perfil)} solo ve las planillas de sus áreas.");
         return areas;
     }

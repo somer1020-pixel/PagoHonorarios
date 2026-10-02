@@ -36,9 +36,10 @@
         <div class="d-flex flex-wrap gap-3">
             @foreach (var a in Model.Areas)
             {
-                <label class="d-flex gap-2 align-items-center text-13"><input type="checkbox" name="areas" value="@a.Id" /> @a.Nombre</label>
+                <label class="d-flex gap-2 align-items-center text-13" data-area-perfil="@a.Perfil"><input type="checkbox" name="areas" value="@a.Id" /> @a.Nombre</label>
             }
         </div>
+        <p class="m-0 text-12 muted sin-areas" hidden>Este perfil aún no tiene áreas: créalas en <a href="/Maestros/Jobs">Maestros → Jobs y glosas</a>.</p>
     </fieldset>
     <p class="m-0 text-12 muted">Finanzas y Administrador ven todas las áreas. La persona recibe un enlace para definir su propia contraseña: el Administrador nunca la conoce.</p>
     <button class="btn btn-primary align-self-start">Crear usuario</button>
@@ -60,9 +61,10 @@
                 <div class="d-flex flex-wrap gap-3">
                     @foreach (var a in Model.Areas)
                     {
-                        <label class="d-flex gap-2 align-items-center text-13"><input type="checkbox" name="areas" value="@a.Id" checked="@(s.Areas.Any(x => x.Id == a.Id))" /> @a.Nombre</label>
+                        <label class="d-flex gap-2 align-items-center text-13" data-area-perfil="@a.Perfil"><input type="checkbox" name="areas" value="@a.Id" checked="@(s.Areas.Any(x => x.Id == a.Id))" /> @a.Nombre</label>
                     }
                 </div>
+                <p class="m-0 text-12 muted sin-areas" hidden>Este perfil aún no tiene áreas: créalas en <a href="/Maestros/Jobs">Maestros → Jobs y glosas</a>.</p>
             </fieldset>
             <button class="btn btn-primary btn-sm">Guardar</button>
             <a class="btn btn-ghost btn-sm" href="/Maestros/Usuarios">Cerrar</a>
@@ -108,10 +110,25 @@
 <p class="m-0 text-12 muted">Los prestadores no aparecen aquí: su acceso al portal se gestiona en Maestros / Prestadores.</p>
 <p class="m-0 text-12 muted">¿Falta un área (por ejemplo, de CEX)? Créala en <a href="/Maestros/Jobs">Maestros → Jobs y glosas</a>.</p>
 <script>
-    // Las áreas solo aplican a Operaciones y perfiles equivalentes (CEX, Public, BHT, MSU, AUM).
+    // Cada área pertenece a un perfil (Operaciones, CEX, Public, BHT, MSU o AUM): solo se muestran las del perfil elegido.
+    // Finanzas y Administrador no llevan áreas (ven todas).
     document.querySelectorAll('fieldset.areas-usuario').forEach(f => {
         const sel = document.getElementById(f.dataset.perfil);
-        const ver = () => { const no = ['Finanzas', 'Admin'].includes(sel.value); f.hidden = no; f.disabled = no; };
+        const ver = () => {
+            const sinAreas = ['Finanzas', 'Admin'].includes(sel.value);
+            f.hidden = sinAreas; f.disabled = sinAreas;
+            let n = 0;
+            f.querySelectorAll('[data-area-perfil]').forEach(l => {
+                const propia = l.dataset.areaPerfil === sel.value;
+                // .d-flex usa !important: se oculta con display none !important.
+                if (propia) l.style.removeProperty('display'); else l.style.setProperty('display', 'none', 'important');
+                const c = l.querySelector('input');
+                c.disabled = !propia;
+                if (!propia) c.checked = false;
+                if (propia) n++;
+            });
+            f.querySelector('.sin-areas').hidden = sinAreas || n > 0;
+        };
         sel.addEventListener('change', ver); ver();
     });
 </script>

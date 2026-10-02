@@ -28,6 +28,8 @@ public class Area : EntidadAuditable
 {
     public string Nombre { get; set; } = "";
     public string CodigoArea { get; set; } = "";
+    /// <summary>Perfil al que pertenece el área (Operaciones, CEX, Public, BHT, MSU o AUM): solo sus usuarios pueden gestionarla.</summary>
+    public string Perfil { get; set; } = Roles.Operaciones;
 }
 
 /// <summary>Ítem presupuestario.</summary>

@@ -73,7 +73,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
             fk.DeleteBehavior = DeleteBehavior.Restrict;
 
         m.Entity<Ciclo>(e => { e.HasIndex(x => x.Periodo).IsUnique(); e.HasIndex(x => x.Codigo).IsUnique(); e.Property(x => x.Codigo).HasMaxLength(10); });
-        m.Entity<Area>(e => { e.HasIndex(x => x.Nombre).IsUnique(); e.Property(x => x.Nombre).HasMaxLength(100); e.Property(x => x.CodigoArea).HasMaxLength(20); });
+        m.Entity<Area>(e => { e.HasIndex(x => x.Nombre).IsUnique(); e.Property(x => x.Nombre).HasMaxLength(100); e.Property(x => x.CodigoArea).HasMaxLength(20);
+            e.Property(x => x.Perfil).HasMaxLength(40).HasDefaultValue(IpsosPagoHonorarios.Core.Roles.Operaciones); });
         m.Entity<Glosa>(e => { e.HasIndex(x => x.NombreGlosa).IsUnique(); e.Property(x => x.NombreGlosa).HasMaxLength(150); e.Property(x => x.Item).HasMaxLength(20); e.Property(x => x.CuentaContable).HasMaxLength(20); });
         m.Entity<Banco>(e => { e.HasIndex(x => x.Nombre).IsUnique(); e.Property(x => x.Nombre).HasMaxLength(60); e.Property(x => x.CodigoBanco).HasMaxLength(10); });
         m.Entity<TipoCuenta>(e => { e.HasIndex(x => x.Nombre).IsUnique(); e.Property(x => x.Nombre).HasMaxLength(40); e.Property(x => x.Codigo).HasMaxLength(10); });
