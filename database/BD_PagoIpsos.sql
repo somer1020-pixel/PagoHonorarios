@@ -1043,6 +1043,17 @@ IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'PRESTADOR'
     INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'Prestador', N'PRESTADOR', CONVERT(nvarchar(max), NEWID()));
 IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'ADMIN')
     INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'Admin', N'ADMIN', CONVERT(nvarchar(max), NEWID()));
+-- Perfiles que operan como Operaciones (mismas pantallas y permisos)
+IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'CEX')
+    INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'CEX', N'CEX', CONVERT(nvarchar(max), NEWID()));
+IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'PUBLIC')
+    INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'Public', N'PUBLIC', CONVERT(nvarchar(max), NEWID()));
+IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'BHT')
+    INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'BHT', N'BHT', CONVERT(nvarchar(max), NEWID()));
+IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'MSU')
+    INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'MSU', N'MSU', CONVERT(nvarchar(max), NEWID()));
+IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'AUM')
+    INSERT INTO [AspNetRoles] ([Id], [Name], [NormalizedName], [ConcurrencyStamp]) VALUES (CONVERT(nvarchar(450), NEWID()), N'AUM', N'AUM', CONVERT(nvarchar(max), NEWID()));
 
 -- Catálogos de Finanzas (TODO(diseño): completar con la hoja Formato)
 IF NOT EXISTS (SELECT 1 FROM [Areas] WHERE [Nombre] = N'FACE TO FACE')

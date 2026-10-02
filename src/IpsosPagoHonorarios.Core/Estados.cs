@@ -52,8 +52,22 @@ public static class Roles
     public const string Finanzas = "Finanzas";
     public const string Prestador = "Prestador";
     public const string Admin = "Admin";
-    public static readonly string[] Todos = [Operaciones, Finanzas, Prestador, Admin];
-    public static readonly string[] Internos = [Operaciones, Finanzas, Admin];
+    public const string CEX = "CEX";
+    public const string Public = "Public";
+    public const string BHT = "BHT";
+    public const string MSU = "MSU";
+    public const string AUM = "AUM";
+
+    /// <summary>
+    /// Perfiles que gestionan procesos de pago igual que Operaciones: mismas pantallas y permisos. Al ingresar, la identidad
+    /// recibe además el rol Operaciones (ver FabricaClaims), así que toda regla de Operaciones aplica también a ellos.
+    /// </summary>
+    public static readonly string[] ComoOperaciones = [CEX, Public, BHT, MSU, AUM];
+
+    /// <summary>Perfiles internos asignables en Maestros → Usuarios.</summary>
+    public static readonly string[] Internos = [Operaciones, .. ComoOperaciones, Finanzas, Admin];
+    /// <summary>Los perfiles específicos van antes que Operaciones para mostrarse en el encabezado.</summary>
+    public static readonly string[] Todos = [.. ComoOperaciones, Operaciones, Finanzas, Prestador, Admin];
 }
 
 public static class Textos

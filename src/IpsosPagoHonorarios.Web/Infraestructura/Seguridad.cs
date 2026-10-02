@@ -28,6 +28,9 @@ public class FabricaClaims(UserManager<Usuario> users, RoleManager<IdentityRole>
         var id = await base.GenerateClaimsAsync(u);
         id.AddClaim(new Claim("nombre", string.IsNullOrWhiteSpace(u.NombreCompleto) ? u.UserName ?? "" : u.NombreCompleto));
         if (u.PrestadorId is { } pid) id.AddClaim(new Claim("prestador", pid.ToString()));
+        // CEX, Public, BHT, MSU y AUM operan como Operaciones: mismas pantallas y permisos.
+        if (Roles.ComoOperaciones.Any(r => id.HasClaim(id.RoleClaimType, r)) && !id.HasClaim(id.RoleClaimType, Roles.Operaciones))
+            id.AddClaim(new Claim(id.RoleClaimType, Roles.Operaciones));
         return id;
     }
 }

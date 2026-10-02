@@ -24,7 +24,7 @@ public class UsuariosService(AppDbContext db, UserManager<Usuario> users, Audito
                               where Perfiles.Contains(r.Name!)
                               select new { ur.UserId, Rol = r.Name! }).ToListAsync();
         var perfilDe = internos.GroupBy(x => x.UserId)
-            .ToDictionary(g => g.Key, g => Perfiles.First(p => g.Any(x => x.Rol == p)));   // Admin pesa más si tuviera varios
+            .ToDictionary(g => g.Key, g => Enumerable.Reverse(Perfiles).First(p => g.Any(x => x.Rol == p)));   // Admin pesa más si tuviera varios
         var ids = perfilDe.Keys.ToList();
         var lista = await db.Users.AsNoTracking().Where(u => ids.Contains(u.Id)).ToListAsync();
         var nombres = lista.Select(u => u.UserName).ToList();
@@ -126,7 +126,7 @@ public class UsuariosService(AppDbContext db, UserManager<Usuario> users, Audito
 
     private static void ExigirPerfil(string? perfil)
     {
-        if (perfil is null || !Perfiles.Contains(perfil)) throw new ReglaException("Elige un perfil: Operaciones, Finanzas o Administrador.");
+        if (perfil is null || !Perfiles.Contains(perfil)) throw new ReglaException($"Elige un perfil: {string.Join(", ", Perfiles.Select(NombrePerfil))}.");
     }
 
     private async Task<Usuario> InternoAsync(string id)
@@ -139,7 +139,7 @@ public class UsuariosService(AppDbContext db, UserManager<Usuario> users, Audito
     private async Task<string?> PerfilAsync(Usuario u)
     {
         var roles = await users.GetRolesAsync(u);
-        return Perfiles.FirstOrDefault(roles.Contains);
+        return Enumerable.Reverse(Perfiles).FirstOrDefault(roles.Contains);
     }
 
     /// <summary>Nadie puede quitarse a sí mismo el perfil Administrador ni dejar el sistema sin un Administrador activo.</summary>

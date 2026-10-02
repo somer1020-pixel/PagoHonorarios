@@ -267,4 +267,34 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.True((await db.Users.AsNoTracking().SingleAsync(u => u.Id == admin.Usuario.Id)).Activo);
         Assert.Contains(await db.Auditorias.ToListAsync(), a => a.Accion == "Cambiar perfil" && a.EntidadId == "nuevo@ejemplo.cl");
     }
+
+    [Theory]
+    [InlineData(Roles.CEX)] [InlineData(Roles.Public)] [InlineData(Roles.BHT)] [InlineData(Roles.MSU)] [InlineData(Roles.AUM)]
+    public async Task PerfilesComoOperaciones_MismasPantallasYPermisos(string perfil)
+    {
+        using var scope = app.Services.CreateScope();
+        var sp = scope.ServiceProvider;
+        var usuarios = sp.GetRequiredService<UsuariosService>();
+        var email = $"{perfil.ToLowerInvariant()}@ejemplo.cl";
+        var enlace = await usuarios.CrearAsync(email, $"Usuario {perfil}", perfil, "https://h");
+        var token = Uri.UnescapeDataString(enlace.Split("&t=")[1]);
+        Assert.True((await sp.GetRequiredService<PrestadoresService>().DefinirContrasenaAsync(email, token, "clave1234", activacion: true)).Succeeded);
+        Assert.Equal(perfil, (await usuarios.ListarAsync()).Single(x => x.Usuario.Email == email).Perfil);
+
+        var u = await sp.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<Usuario>>().FindByEmailAsync(email);
+        var principal = await sp.GetRequiredService<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<Usuario>>().CreateAsync(u!);
+        Assert.True(principal.IsInRole(perfil));
+        Assert.True(principal.IsInRole(Roles.Operaciones));   // toda regla de Operaciones aplica
+        Assert.False(principal.IsInRole(Roles.Finanzas));
+
+        var c = Cliente();
+        Assert.Equal("/", (await IngresarAsync(c, email, "clave1234")).Headers.Location!.OriginalString);
+        foreach (var ruta in new[] { "/", "/Ciclos/Produccion", "/Ciclos/ValidacionCuentas", "/Ciclos/Planilla", "/Boletas/Seguimiento", "/Ciclos/Correcciones",
+                     "/Maestros/Prestadores", "/Maestros/Jobs", "/Ciclos/Historial" })
+            Assert.Equal(HttpStatusCode.OK, (await c.GetAsync(ruta)).StatusCode);
+        Denegado(await c.GetAsync("/Finanzas/Revision"));
+        Denegado(await c.GetAsync("/Finanzas/Pagos"));
+        Denegado(await c.GetAsync("/Maestros/Usuarios"));
+        Assert.Contains($"<span class=\"rol-top\">{perfil}</span>", await c.GetStringAsync("/"));   // el encabezado muestra el perfil específico
+    }
 }
