@@ -20,6 +20,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Sin IpsosPagoHonorarios.Web.exe: se ejecuta con dotnet.exe (firmado por Microsoft). Evita el bloqueo de
+         Control inteligente de aplicaciones / App Control de Windows sobre ejecutables locales sin firma. -->
+    <UseAppHost>false</UseAppHost>
   </PropertyGroup>
 
 </Project>
