@@ -67,6 +67,16 @@ En la pantalla Correcciones, el botón **Simular vencimiento (demo)** (solo en D
 
 Barra superior con selector de ciclo y la píldora **“Corrección vence en mm:ss”** cuando hay una devolución activa; menú lateral agrupado que en celular (≤ 760 px) se vuelve fila de chips. El rol Prestador solo accede a `/Portal` (cualquier otra ruta responde 403).
 
+## Base de datos SQL Server (BD_PagoIpsos)
+
+1. Ejecutar [`database/BD_PagoIpsos.sql`](database/BD_PagoIpsos.sql) en **AMCLSANSQL9** (SSMS o `sqlcmd -S AMCLSANSQL9 -U <admin> -P <clave> -i database/BD_PagoIpsos.sql`). Crea la base, las 29 tablas con sus índices, los roles, los catálogos, los parámetros y la tasa 2026. Es idempotente.
+2. Dar permisos a `user_sql` (bloque comentado al inicio del script): `db_datareader`, `db_datawriter` y, si la app debe aplicar migraciones futuras, `db_ddladmin`.
+3. La cadena de conexión está en `src/IpsosPagoHonorarios.Web/appsettings.json` (`ConnectionStrings:Default`) con la clave `XXXXX`. **No subas la clave real al repositorio (es público):** créala en `appsettings.Production.json` (ignorado por git; ver `deploy/appsettings.Production.ejemplo.json`) o en la variable de entorno `ConnectionStrings__Default`.
+4. Primer administrador: definir `Semilla:AdminEmail` y `Semilla:AdminPassword` en ese mismo `appsettings.Production.json`; la app lo crea al iniciar.
+5. En Visual Studio, el perfil **BD_PagoIpsos (SQL Server)** ejecuta la app contra esa base (`http://localhost:5033`). Los perfiles `http`/`https` siguen usando SQLite con datos de demo.
+
+Para regenerar el script tras cambios del modelo: `dotnet ef migrations script --idempotent -p src/IpsosPagoHonorarios.Web` con `ASPNETCORE_ENVIRONMENT=Production`.
+
 ## Pruebas
 
 ```bash

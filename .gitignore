@@ -12,3 +12,5 @@ publish/
 *.db
 *.db-shm
 *.db-wal
+# Configuración con secretos reales (clave SQL, admin inicial): no subir al repositorio
+**/appsettings.Production.json
