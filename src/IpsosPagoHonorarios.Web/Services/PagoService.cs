@@ -58,6 +58,18 @@ public class PagoService(
         return (bytes, nombre);
     }
 
+    public const int MaxComprobante = 5 * 1024 * 1024;
+
+    /// <summary>Formatos admitidos para el comprobante de transferencia (por contenido, no por extensión): PDF, JPG o PNG.</summary>
+    public static (string Ext, string Mime)? TipoComprobante(byte[] b)
+    {
+        if (b.Length == 0) return null;
+        if (LectorPdf.EsPdf(b)) return (".pdf", "application/pdf");
+        if (b.Length > 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return (".jpg", "image/jpeg");
+        if (b.Length > 8 && b.AsSpan(0, 8).SequenceEqual((byte[])[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])) return (".png", "image/png");
+        return null;
+    }
+
     /// <summary>R-14: registra fecha, N° de operación y comprobante; las líneas pasan a Pagada. R-23/R-27: solo cuenta validada.</summary>
     public async Task<Transferencia> RegistrarTransferenciaAsync(int planillaId, int prestadorId, DateOnly fecha, string numeroOperacion, byte[] comprobante, string nombreComprobante)
     {
@@ -65,7 +77,9 @@ public class PagoService(
         CicloService.ExigirAbierto(p.Ciclo);
         if (p.Estado is not (PlanillaEstado.Aprobada or PlanillaEstado.EnPago)) throw new ReglaException("La planilla no está aprobada.");
         if (string.IsNullOrWhiteSpace(numeroOperacion)) throw new ReglaException("El N° de operación es obligatorio.");
-        if (comprobante.Length == 0 || !LectorPdf.EsPdf(comprobante)) throw new ReglaException("El comprobante debe ser un PDF.");
+        var tipo = TipoComprobante(comprobante) ?? throw new ReglaException("El comprobante debe ser un PDF o una imagen (JPG o PNG).");
+        if (comprobante.Length > MaxComprobante) throw new ReglaException("El comprobante supera el máximo de 5 MB.");
+        nombreComprobante = Path.ChangeExtension(string.IsNullOrWhiteSpace(nombreComprobante) ? "comprobante" : Path.GetFileName(nombreComprobante), tipo.Ext);
         var r = (await ResumenAsync(p)).FirstOrDefault(x => x.Prestador.Id == prestadorId) ?? throw new ReglaException("El prestador no tiene líneas aprobadas.");
         if (r.Transferencia is not null) throw new ReglaException("La transferencia de esta boleta ya fue registrada.");
         if (r.Boleta is null) throw new ReglaException("No hay boleta vigente.");
@@ -86,6 +100,8 @@ public class PagoService(
         await db.SaveChangesAsync();
         return t;
     }
+
+    private static string ExtensionDe(string ruta) => Path.GetExtension(ruta) is { Length: > 0 } e ? e.ToLowerInvariant() : ".pdf";
 
     /// <summary>R-15: cierre con todas las líneas pagadas o diferidas; ZIP con planillas, boletas, nóminas, comprobantes y bitácora.</summary>
     public async Task CerrarCicloAsync(int cicloId)
@@ -117,7 +133,7 @@ public class PagoService(
                 Add($"{carpeta}/{area}/{a.Tipo}_v{a.Version}_{a.NombreArchivo}", a.Ruta);
             }
             foreach (var b in bols) Add($"boletas/{b.Prestador.RutPlanilla}_N{b.NumeroBoleta}_{b.Estado}_{b.Id}.pdf", b.RutaPdf);
-            foreach (var t in trans) Add($"comprobantes/{t.Prestador.RutPlanilla}_{t.NumeroOperacion}.pdf", t.Comprobante);
+            foreach (var t in trans) Add($"comprobantes/{t.Prestador.RutPlanilla}_{t.NumeroOperacion}{ExtensionDe(t.Comprobante)}", t.Comprobante);
             var csv = new StringBuilder("Fecha;Usuario;Entidad;Id;Accion;Detalle\n");
             foreach (var a in bitacora)
                 csv.AppendLine(string.Join(";", Formato.FechaHora(a.Fecha), a.Usuario, a.Entidad, a.EntidadId, a.Accion, a.Detalle?.Replace(';', ',').Replace('\n', ' ')));

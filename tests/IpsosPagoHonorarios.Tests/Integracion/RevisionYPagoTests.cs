@@ -299,9 +299,22 @@ public class RevisionYPagoTests
         await Assert.ThrowsAsync<ReglaException>(() =>
             f.E.Pagos.RegistrarTransferenciaAsync(f.P.Id, f.Cam.Id, new DateOnly(2026, 11, 5), "OP-1", "no pdf"u8.ToArray(), "c.pdf"));
         var n = 0;
+        // Comprobante como imagen: se admiten JPG y PNG (por contenido), además de PDF.
+        byte[] jpg = [0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F'];
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D];
+        Assert.Equal(".jpg", PagoService.TipoComprobante(jpg)?.Ext);
+        Assert.Equal("image/png", PagoService.TipoComprobante(png)?.Mime);
         foreach (var x in await f.E.Pagos.ResumenAsync(await f.E.RecargarAsync(f.P)))
-            await f.E.Pagos.RegistrarTransferenciaAsync(f.P.Id, x.Prestador.Id, new DateOnly(2026, 11, 5), $"OP-00488{++n}",
-                BoletaPdf.Comprobante($"OP-00488{n}", x.Prestador.RutPlanilla, x.Liquido, new DateOnly(2026, 11, 5)), "comprobante.pdf");
+        {
+            ++n;
+            var (bytes, archivo) = n switch
+            {
+                1 => (jpg, "foto deposito.jpeg"),
+                2 => (png, "captura.PNG"),
+                _ => (BoletaPdf.Comprobante($"OP-00488{n}", x.Prestador.RutPlanilla, x.Liquido, new DateOnly(2026, 11, 5)), "comprobante.pdf")
+            };
+            await f.E.Pagos.RegistrarTransferenciaAsync(f.P.Id, x.Prestador.Id, new DateOnly(2026, 11, 5), $"OP-00488{n}", bytes, archivo);
+        }
         f.P = await f.E.RecargarAsync(f.P);
         Assert.All(f.P.Activas(), l => Assert.Equal(LineaEstado.Pagada, l.Estado));
         Assert.Equal(5, await f.E.Db.Transferencias.CountAsync());   // una por boleta
@@ -319,6 +332,8 @@ public class RevisionYPagoTests
             Assert.Contains(nombres, x => x.StartsWith("nominas/"));
             Assert.Equal(6, nombres.Count(x => x.StartsWith("boletas/")));      // incluye la reemplazada
             Assert.Equal(5, nombres.Count(x => x.StartsWith("comprobantes/")));
+            Assert.Single(nombres, x => x.StartsWith("comprobantes/") && x.EndsWith(".jpg"));
+            Assert.Single(nombres, x => x.StartsWith("comprobantes/") && x.EndsWith(".png"));
             Assert.Contains("bitacora.csv", nombres);
         }
         // Solo lectura tras el cierre.

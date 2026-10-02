@@ -62,7 +62,7 @@ public class PagosModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos
         try
         {
             if (fecha is null) throw new ReglaException("La fecha es obligatoria.");
-            if (comprobante is null || comprobante.Length == 0) throw new ReglaException("Adjunta el comprobante PDF.");
+            if (comprobante is null || comprobante.Length == 0) throw new ReglaException("Adjunta el comprobante (PDF o imagen JPG/PNG).");
             var t = await pagos.RegistrarTransferenciaAsync(Planilla ?? 0, prestadorId, fecha.Value, numeroOperacion, await LeerAsync(comprobante), comprobante.FileName);
             MensajeOk = $"Pago registrado: {t.NumeroOperacion} por {Formato.Clp(t.MontoLiquido)}.";
         }
@@ -80,6 +80,8 @@ public class PagosModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos
     {
         var t = await db.Transferencias.FirstOrDefaultAsync(x => x.Id == transferenciaId);
         if (t is null || !archivos.Existe(t.Comprobante)) return NotFound();
-        return File(archivos.Leer(t.Comprobante), "application/pdf", $"comprobante_{t.NumeroOperacion}.pdf");
+        var bytes = archivos.Leer(t.Comprobante);
+        var (ext, mime) = PagoService.TipoComprobante(bytes) ?? (".pdf", "application/pdf");
+        return File(bytes, mime, $"comprobante_{t.NumeroOperacion}{ext}");
     }
 }

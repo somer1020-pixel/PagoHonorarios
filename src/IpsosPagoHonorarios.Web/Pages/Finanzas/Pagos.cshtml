@@ -71,7 +71,7 @@
                             @foreach (var x in porTransferir) { <option value="@x.Prestador.Id">@x.Prestador.NombreCompleto · @Formato.Clp(x.Liquido)</option> }
                         </select></div>
                 </div>
-                <label class="zona-carga compacta">Comprobante PDF<input type="file" name="comprobante" accept="application/pdf" required /></label>
+                <label class="zona-carga compacta">Comprobante (PDF, JPG o PNG · máx. 5 MB)<input type="file" name="comprobante" accept="application/pdf,image/jpeg,image/png" required /></label>
                 <button class="btn btn-primary align-self-start">Registrar pago</button>
             </fieldset>
             <p class="m-0 text-12 muted">Siempre a la cuenta registrada y validada. Las líneas pasan a Pagada y se avisa al prestador por correo.</p>
