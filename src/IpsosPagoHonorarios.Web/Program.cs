@@ -21,7 +21,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
     if (proveedor.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
         o.UseSqlite(cfg.GetConnectionString("Default") ?? "Data Source=App_Data/honorarios.db", s => s.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
     else
-        o.UseSqlServer(cfg.GetConnectionString("Default"), s => s.EnableRetryOnFailure().UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+        o.UseSqlServer(cfg.GetConnectionString("Default"), s => s.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
 });
 
 builder.Services.AddIdentity<Usuario, IdentityRole>(o =>
