@@ -14,7 +14,7 @@ public sealed record DatosBoleta
     public bool Anulada { get; init; }
 }
 
-public sealed record ResultadoConciliacion(List<string> Problemas, bool EmisorIncorrecto, decimal Diferencia)
+public sealed record ResultadoConciliacion(List<string> Problemas, bool EmisorIncorrecto, decimal Diferencia, bool FueraDePlazo = false)
 {
     public bool Cuadra => Problemas.Count == 0;
 }
@@ -34,8 +34,9 @@ public static class Conciliacion
     /// </summary>
     public static ResultadoConciliacion Conciliar(
         DatosBoleta b, int rutPrestador, string rutEmpresa, DateOnly periodo,
-        IEnumerable<decimal> totalesFilas, Func<int, string, bool> numeroYaUsado, int diaLimite = 10)
+        IEnumerable<decimal> totalesFilas, Func<int, string, bool> numeroYaUsado, int diaLimite = 10, bool fechaAutorizada = false)
     {
+        var fueraDePlazo = false;
         var problemas = new List<string>();
         var emisorIncorrecto = false;
 
@@ -56,7 +57,12 @@ public static class Conciliacion
         if (b.FechaEmision is null)
             problemas.Add("No se pudo leer la fecha de emisión.");
         else if (b.FechaEmision < inicio || b.FechaEmision > limite)
-            problemas.Add($"La fecha {Formato.Fecha(b.FechaEmision)} está fuera del plazo ({Formato.Fecha(inicio)} a {Formato.Fecha(limite)}).");
+        {
+            fueraDePlazo = true;
+            // Una boleta fuera de plazo solo se admite si el Administrador lo autoriza.
+            if (!fechaAutorizada)
+                problemas.Add($"La fecha {Formato.Fecha(b.FechaEmision)} está fuera del plazo ({Formato.Fecha(inicio)} a {Formato.Fecha(limite)}): no se admite salvo autorización del Administrador.");
+        }
 
         var suma = totalesFilas.Sum();
         var diferencia = (b.Bruto ?? 0) - suma;
@@ -73,6 +79,6 @@ public static class Conciliacion
         else if (emisor > 0 && numeroYaUsado(emisor, b.Numero))
             problemas.Add($"La boleta N° {b.Numero} ya se usó en otro pago.");
 
-        return new(problemas, emisorIncorrecto, diferencia);
+        return new(problemas, emisorIncorrecto, diferencia, fueraDePlazo);
     }
 }

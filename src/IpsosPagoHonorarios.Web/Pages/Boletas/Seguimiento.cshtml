@@ -80,6 +80,27 @@
                         {
                             <div class="aviso aviso-danger text-12">@b.ResultadoValidacion</div>
                         }
+                        @if (b.FechaAutorizadaEn is not null)
+                        {
+                            <div class="aviso aviso-warning text-12"><strong>Fecha fuera de plazo autorizada</strong> por @b.FechaAutorizadaPor (Administrador) el @Formato.FechaHora(b.FechaAutorizadaEn): @b.FechaAutorizadaMotivo</div>
+                        }
+                        else if (b.FueraDePlazo && b.Vigente)
+                        {
+                            @if (Model.EsAdmin && !cerrada)
+                            {
+                                <form method="post" asp-page-handler="AutorizarFecha" asp-route-planilla="@p.Id" asp-route-prestador="@s.Prestador.Id" class="aviso aviso-warning d-flex flex-column gap-2">
+                                    <input type="hidden" name="boletaId" value="@b.Id" />
+                                    <strong>Boleta con fecha fuera de plazo</strong>
+                                    <label class="form-label m-0" for="af-m">Motivo de la autorización (Administrador)</label>
+                                    <textarea id="af-m" name="motivo" class="form-control" rows="2" required></textarea>
+                                    <button class="btn btn-primary btn-sm align-self-start">Autorizar fecha fuera de plazo</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <div class="aviso aviso-warning text-12">Boleta con fecha fuera de plazo: no se admite. Solo el <strong>Administrador</strong> puede autorizar su uso.</div>
+                            }
+                        }
                         @if (b.MotivoCargaOperaciones is not null)
                         {
                             <div class="aviso aviso-neutral text-12"><strong>Motivo de carga por Operaciones:</strong> @b.MotivoCargaOperaciones</div>

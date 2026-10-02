@@ -82,6 +82,19 @@ public class ProduccionYBoletaTests
     }
 
     [Fact]
+    public void BoletaFueraDePlazo_SoloSeAdmiteConAutorizacion()
+    {
+        var sept = Boleta(fecha: new DateOnly(2026, 9, 1));
+        var sin = Conciliacion.Conciliar(sept, 15234871, "77777777-7", Oct, [345000m], (_, _) => false);
+        Assert.False(sin.Cuadra);
+        Assert.True(sin.FueraDePlazo);
+        Assert.Contains(sin.Problemas, p => p.Contains("autorización del Administrador"));
+        var con = Conciliacion.Conciliar(sept, 15234871, "77777777-7", Oct, [345000m], (_, _) => false, fechaAutorizada: true);
+        Assert.True(con.Cuadra);
+        Assert.True(con.FueraDePlazo);
+    }
+
+    [Fact]
     public void R06_Exigencias()
     {
         var emisor = Conciliacion.Conciliar(Boleta(emisor: "16987452-2"), 15234871, "77777777-7", Oct, [345000m], (_, _) => false);

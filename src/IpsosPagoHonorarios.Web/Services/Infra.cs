@@ -28,7 +28,7 @@ public class HttpUsuarioActual(IHttpContextAccessor acc) : IUsuarioActual
 public class UsuarioFijo(string nombre) : IUsuarioActual
 {
     public string? Nombre { get; set; } = nombre;
-    public ClaimsPrincipal? Principal => null;
+    public ClaimsPrincipal? Principal { get; set; }
 }
 
 public class OpcionesAlmacenamiento

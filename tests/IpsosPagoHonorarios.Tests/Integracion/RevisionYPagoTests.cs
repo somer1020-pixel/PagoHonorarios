@@ -94,6 +94,37 @@ public class RevisionYPagoTests
     }
 
     [Fact]
+    public async Task BoletaFueraDePlazo_NoSeAdmite_SoloElAdministradorLaAutoriza()
+    {
+        using var f = await new F2F().CargarAsync(boletaFrancisca: false);
+        var r = await f.E.SubirAsync(f.P, f.Fra, "500", 331500, BoletaCanal.Operaciones, "prueba", fecha: new DateOnly(2026, 9, 1));
+        Assert.False(r.Conciliacion.Cuadra);
+        Assert.True(r.Boleta.FueraDePlazo);
+        f.P = await f.E.RecargarAsync(f.P);
+        Assert.Equal(LineaEstado.PendienteBoleta, f.P.Lineas.Single(l => l.PrestadorId == f.Fra.Id).Estado);   // no se admite
+        await Assert.ThrowsAsync<ReglaException>(() => f.E.Boletas.ConfirmarAsync(r.Boleta.Id));
+
+        // Operaciones (o Finanzas) no puede autorizar.
+        f.E.Usuario.Principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, Roles.Operaciones)], "prueba"));
+        var ex = await Assert.ThrowsAsync<ReglaException>(() => f.E.Boletas.AutorizarFueraDePlazoAsync(r.Boleta.Id, "urgente"));
+        Assert.Contains("Administrador", ex.Message);
+
+        // El Administrador sí, con motivo; la boleta pasa a cuadrar y queda en la bitácora.
+        f.E.Como("Admin");
+        f.E.Usuario.Principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, Roles.Admin)], "prueba"));
+        await Assert.ThrowsAsync<ReglaException>(() => f.E.Boletas.AutorizarFueraDePlazoAsync(r.Boleta.Id, " "));
+        var c = await f.E.Boletas.AutorizarFueraDePlazoAsync(r.Boleta.Id, "Prestador emitió en septiembre por error del sistema");
+        Assert.True(c.Cuadra);
+        var b = await f.E.Db.Boletas.FindAsync(r.Boleta.Id);
+        Assert.Equal(("Admin", true), (b!.FechaAutorizadaPor, b.Cuadra));
+        f.P = await f.E.RecargarAsync(f.P);
+        Assert.Equal(LineaEstado.Lista, f.P.Lineas.Single(l => l.PrestadorId == f.Fra.Id).Estado);
+        Assert.Contains(await f.E.Db.Auditorias.ToListAsync(), a => a.Accion == "Autorizar boleta fuera de plazo");
+    }
+
+    [Fact]
     public async Task R22_CargaEnNombreDelPrestador_MotivoObligatorio_CanalYAviso()
     {
         using var f = await new F2F().CargarAsync(boletaFrancisca: false);

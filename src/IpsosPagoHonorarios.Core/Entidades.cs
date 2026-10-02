@@ -197,6 +197,11 @@ public class BoletaHonorarios : EntidadAuditable
     public string? ConfirmadaPor { get; set; }
     public DateTime? ConfirmadaEn { get; set; }
     public int? ReemplazaABoletaId { get; set; }
+    /// <summary>Autorización del Administrador para admitir una boleta con fecha fuera de plazo.</summary>
+    public string? FechaAutorizadaPor { get; set; }
+    public DateTime? FechaAutorizadaEn { get; set; }
+    public string? FechaAutorizadaMotivo { get; set; }
+    public bool FueraDePlazo { get; set; }
     /// <summary>Resultado de la conciliación R-06 (vacío = cuadra).</summary>
     public string? ResultadoValidacion { get; set; }
     public bool Cuadra { get; set; }

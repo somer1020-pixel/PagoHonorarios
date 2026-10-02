@@ -65,6 +65,16 @@ public class SeguimientoModel(AppDbContext db, ContextoLayout ctx, CicloService 
             if (!r.Cuadra) throw new ReglaException("Lectura corregida, pero la boleta no cuadra: " + string.Join(" ", r.Problemas));
         }, "Lectura corregida: la boleta cuadra.", Ruta, [Roles.Operaciones, Roles.Finanzas]);
 
+    public bool EsAdmin => User.IsInRole(Roles.Admin);
+
+    public Task<IActionResult> OnPostAutorizarFechaAsync(int boletaId, string motivo) =>
+        AccionAsync(async () =>
+        {
+            if (!EsAdmin) throw new ReglaException("Solo el Administrador puede autorizar una boleta fuera de plazo.");
+            var r = await boletas.AutorizarFueraDePlazoAsync(boletaId, motivo);
+            if (!r.Cuadra) throw new ReglaException("Fecha autorizada, pero la boleta aún no cuadra: " + string.Join(" ", r.Problemas));
+        }, "Boleta fuera de plazo autorizada por el Administrador: la boleta cuadra.", Ruta, [Roles.Admin]);
+
     public Task<IActionResult> OnPostPedirNuevaAsync(int boletaId, string motivo) =>
         AccionAsync(() => boletas.PedirNuevaAsync(boletaId, motivo), "Se pidió una nueva boleta al prestador (aviso por correo).", Ruta, [Roles.Operaciones, Roles.Finanzas]);
 

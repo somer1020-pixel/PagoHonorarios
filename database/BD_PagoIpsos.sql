@@ -30,7 +30,7 @@ ALTER ROLE db_ddladmin  ADD MEMBER [user_sql];
 GO
 ------------------------------------------------------------------------------------------------ */
 
-/* ---------- Tablas, índices y claves (migración Inicial) ---------- */
+/* ---------- Tablas, índices y claves (todas las migraciones) ---------- */
 IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [__EFMigrationsHistory] (
@@ -980,6 +980,51 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261002121808_Inicial', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002191226_AutorizacionFechaBoleta'
+)
+BEGIN
+    ALTER TABLE [Boletas] ADD [FechaAutorizadaEn] datetime2 NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002191226_AutorizacionFechaBoleta'
+)
+BEGIN
+    ALTER TABLE [Boletas] ADD [FechaAutorizadaMotivo] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002191226_AutorizacionFechaBoleta'
+)
+BEGIN
+    ALTER TABLE [Boletas] ADD [FechaAutorizadaPor] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002191226_AutorizacionFechaBoleta'
+)
+BEGIN
+    ALTER TABLE [Boletas] ADD [FueraDePlazo] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261002191226_AutorizacionFechaBoleta'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261002191226_AutorizacionFechaBoleta', N'10.0.12');
 END;
 
 COMMIT;

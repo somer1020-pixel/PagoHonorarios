@@ -132,8 +132,9 @@ public class BoletaService(
             x.RutEmisor == b.RutEmisor && x.NumeroBoleta == b.NumeroBoleta && x.Id != b.Id && x.Id != reemplaza &&
             x.Estado != BoletaEstado.Rechazada && x.Estado != BoletaEstado.Reemplazada);
         var conc = Conciliacion.Conciliar(Datos(b), filas.FirstOrDefault()?.Prestador.Rut ?? 0, par.RutEmpresa, p.Ciclo.Periodo,
-            filas.Select(l => l.ValorTotalBruto), (_, _) => usado, par.DiaLimiteBoleta);
+            filas.Select(l => l.ValorTotalBruto), (_, _) => usado, par.DiaLimiteBoleta, fechaAutorizada: b.FechaAutorizadaEn is not null);
         b.Cuadra = conc.Cuadra;
+        b.FueraDePlazo = conc.FueraDePlazo;
         b.ResultadoValidacion = conc.Cuadra ? null : string.Join(" ", conc.Problemas);
         Flujo.PropagarNumeroBoleta(p, b.PrestadorId, b.NumeroBoleta);
 
@@ -194,6 +195,29 @@ public class BoletaService(
     }
 
     /// <summary>Pide una nueva boleta al prestador: la actual queda Observada y se avisa por correo (R-21).</summary>
+    /// <summary>
+    /// Solo el Administrador autoriza usar una boleta con fecha de emisión fuera de plazo (la página exige el rol).
+    /// Se vuelve a conciliar: el resto de las validaciones se mantiene.
+    /// </summary>
+    public async Task<ResultadoConciliacion> AutorizarFueraDePlazoAsync(int boletaId, string motivo)
+    {
+        if (string.IsNullOrWhiteSpace(motivo)) throw new ReglaException("Indica el motivo de la autorización.");
+        if (usuario.Principal is { } pr && !pr.IsInRole(Roles.Admin)) throw new ReglaException("Solo el Administrador puede autorizar una boleta fuera de plazo.");
+        var b = await ObtenerAsync(boletaId);
+        CicloService.ExigirAbierto(b.Planilla.Ciclo);
+        if (!b.Vigente) throw new ReglaException("La boleta no está vigente.");
+        if (!b.FueraDePlazo) throw new ReglaException("La boleta no está fuera de plazo.");
+        b.FechaAutorizadaPor = usuario.Nombre;
+        b.FechaAutorizadaEn = ciclos.AhoraUtc;
+        b.FechaAutorizadaMotivo = motivo.Trim();
+        var p = await ciclos.PlanillaCompletaAsync(b.PlanillaId);
+        var conc = await ConciliarAsync(p!, p!.Boletas.First(x => x.Id == b.Id));
+        auditor.Registrar(nameof(BoletaHonorarios), b.Id, "Autorizar boleta fuera de plazo",
+            $"N° {b.NumeroBoleta} · fecha {Formato.Fecha(b.FechaEmision)} · {b.Prestador.NombreCompleto} · motivo: {motivo.Trim()}");
+        await db.SaveChangesAsync();
+        return conc;
+    }
+
     public async Task PedirNuevaAsync(int boletaId, string motivo)
     {
         var b = await ObtenerAsync(boletaId);
