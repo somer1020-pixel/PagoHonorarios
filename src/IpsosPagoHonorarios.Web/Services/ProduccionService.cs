@@ -70,9 +70,9 @@ public class ProduccionService(
         avisos.AddRange(ProduccionReglas.AvisosTotales(filas));
         if (leido.Encabezado?.MontoTotal is { } b3 && filas.All(f => f.ValorUnitario is not null && f.Cantidad is not null))
         {
-            var suma = filas.Sum(f => Montos.ValorTotal(f.ValorUnitario!.Value, f.Cantidad!.Value));
+            var suma = filas.Sum(ProduccionReglas.TotalDe);
             if (Montos.RedondearExcel(b3) != suma)
-                avisos.Add($"El monto total del archivo (B3 = {Formato.Clp(b3)}) difiere de la suma recalculada {Formato.Clp(suma)}; se usa {Formato.Clp(suma)}.");
+                avisos.Add($"El monto total del archivo (B3 = {Formato.Clp(b3)}) difiere de la suma de la columna H ({Formato.Clp(suma)}).");
         }
         if (leido.Encabezado?.Area is { Length: > 0 } areaArchivo && !areaArchivo.Equals(area!.Nombre, StringComparison.OrdinalIgnoreCase))
             avisos.Add($"El archivo indica el área «{areaArchivo}» (B4), pero se cargó en {area.Nombre}.");
@@ -142,7 +142,7 @@ public class ProduccionService(
             {
                 Numero = ++numero, TipoGasto = f.TipoGasto ?? s.TipoGasto, Job = job, JobId = job.Id, Glosa = glosa, GlosaId = glosa.Id,
                 ValorUnitarioBruto = f.ValorUnitario!.Value, Cantidad = f.Cantidad!.Value,
-                ValorTotalBruto = Montos.ValorTotal(f.ValorUnitario.Value, f.Cantidad.Value),
+                ValorTotalBruto = ProduccionReglas.TotalDe(f),
                 Prestador = prest, PrestadorId = prest.Id, NombrePlanilla = f.Nombre?.Trim() ?? prest.NombreCompleto,
                 NumeroBoleta = string.IsNullOrWhiteSpace(f.NumeroBoleta) ? null : f.NumeroBoleta.Trim(),
                 CuentaPlanillaTipo = f.TipoCuenta?.Trim(), CuentaPlanillaNumero = f.Cuenta?.Trim(), CuentaPlanillaBanco = f.Banco?.Trim(),

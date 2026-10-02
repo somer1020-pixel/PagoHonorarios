@@ -35,13 +35,15 @@ public class ProduccionYBoletaTests
     }
 
     [Fact]
-    public void R03_TotalEscritoAManoDistintoDeFxG_SeAvisa()
+    public void TotalManualEnH_SeRespeta_YSeInforma()
     {
-        var avisos = ProduccionReglas.AvisosTotales([F(16, vu: 250, q: 45) with { TotalArchivo = 13127 }, F(17, vu: 250, q: 99.845m) with { TotalArchivo = 24961 }]);
-        var a = Assert.Single(avisos);
+        var manual = F(16, vu: 250, q: 45) with { TotalArchivo = 13127 };
+        Assert.Equal(13127m, ProduccionReglas.TotalDe(manual));                       // se usa H
+        Assert.Equal(24961m, ProduccionReglas.TotalDe(F(17, vu: 250, q: 99.845m)));   // sin H: ROUND(F×G)
+        var a = Assert.Single(ProduccionReglas.AvisosTotales([manual, F(17, vu: 250, q: 99.845m) with { TotalArchivo = 24961 }]));
         Assert.Contains("Fila 16", a);
-        Assert.Contains("$11.250", a);
         Assert.Contains("diferencia $1.877", a);
+        Assert.Contains("Se usa el valor de H", a);
     }
 
     [Fact]

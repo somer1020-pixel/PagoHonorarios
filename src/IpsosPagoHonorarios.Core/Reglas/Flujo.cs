@@ -10,7 +10,7 @@ public enum Chequeo { Ok, Pendiente, Error }
 
 public sealed record ChequeosPrestador(
     int PrestadorId, Chequeo Personal, Chequeo Operativa, Chequeo Tributaria, Chequeo Bancaria,
-    string? DetalleTributaria, string? DetalleBancaria, decimal SumaPlanilla, decimal? MontoBoleta);
+    string? DetalleTributaria, string? DetalleBancaria, decimal SumaPlanilla, decimal? MontoBoleta, string? DetalleOperativa = null);
 
 /// <summary>Reglas de transición de la planilla y sus líneas.</summary>
 public static class Flujo
@@ -38,7 +38,7 @@ public static class Flujo
         foreach (var l in activas)
         {
             if (l.Prestador is not null && !RutHelper.EsValido(l.Prestador.RutPlanilla)) motivos.Add($"Línea {l.Numero}: RUT inválido.");
-            if (l.ValorTotalBruto != Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad)) motivos.Add($"Línea {l.Numero}: el total no es ROUND(F×G).");
+            if (l.ValorTotalBruto <= 0) motivos.Add($"Línea {l.Numero}: el valor total debe ser mayor que 0.");
         }
         return Verificacion.De(motivos);
     }
@@ -51,9 +51,11 @@ public static class Flujo
         var personal = prest is not null && RutHelper.EsValido(prest.RutPlanilla) && !string.IsNullOrWhiteSpace(prest.NombreCompleto)
             ? Chequeo.Ok : Chequeo.Error;
         var operativa = lineas.All(l => l.Job is not null && ProduccionReglas.JobValido(l.Job.JobBookNumber) && l.Glosa is not null &&
-                                        l.Cantidad > 0 && l.ValorUnitarioBruto > 0 &&
-                                        l.ValorTotalBruto == Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad))
+                                        l.Cantidad > 0 && l.ValorUnitarioBruto > 0 && l.ValorTotalBruto > 0)
             ? Chequeo.Ok : Chequeo.Error;
+        // El total de la planilla puede venir por fórmula o ingresado a mano: se informa, no es error.
+        var manuales = lineas.Where(l => l.ValorTotalBruto != Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad)).Select(l => l.Numero).ToList();
+        var detOper = manuales.Count == 0 ? null : $"Total ingresado a mano (≠ F×G) en línea {string.Join(", ", manuales)}";
 
         var suma = lineas.Sum(l => l.ValorTotalBruto);
         var boleta = p.BoletaVigente(prestadorId);
@@ -71,7 +73,7 @@ public static class Flujo
         else if (cuenta.Estado != CuentaEstado.Validada) { bancaria = Chequeo.Pendiente; detBanc = "Cuenta por validar"; }
         else bancaria = Chequeo.Ok;
 
-        return new(prestadorId, personal, operativa, tributaria, bancaria, detTrib, detBanc, suma, boleta?.MontoBruto);
+        return new(prestadorId, personal, operativa, tributaria, bancaria, detTrib, detBanc, suma, boleta?.MontoBruto, detOper);
     }
 
     /// <summary>R-10: devolver requiere al menos una observación abierta.</summary>

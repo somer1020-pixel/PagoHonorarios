@@ -35,10 +35,11 @@ public static class ProduccionReglas
             ? null
             : $"Hoy {Formato.Fecha(hoy)} está fuera de la ventana de descarga (días {desde} a {hasta}). Se puede cargar, con aviso.";
 
-    /// <summary>
-    /// R-03: el total siempre es ROUND(F×G). Si el archivo trae otro valor en H (p. ej. escrito a mano en vez de la fórmula),
-    /// se avisa por fila y se usa el valor calculado.
-    /// </summary>
+    /// <summary>Valor total de la fila: el de la columna H si viene (fórmula o valor manual); si no, ROUND(F×G) (R-03).</summary>
+    public static decimal TotalDe(FilaProduccion f) =>
+        f.TotalArchivo is { } h ? Montos.RedondearExcel(h) : Montos.ValorTotal(f.ValorUnitario ?? 0, f.Cantidad ?? 0);
+
+    /// <summary>Informa las filas cuyo total (H) se ingresó a mano y no corresponde a ROUND(F×G). Se respeta el valor de H.</summary>
     public static List<string> AvisosTotales(IEnumerable<FilaProduccion> filas)
     {
         var avisos = new List<string>();
@@ -47,8 +48,8 @@ public static class ProduccionReglas
             if (f.TotalArchivo is not { } h || f.ValorUnitario is not { } vu || f.Cantidad is not { } q) continue;
             var calculado = Montos.ValorTotal(vu, q);
             if (Montos.RedondearExcel(h) != calculado)
-                avisos.Add($"Fila {f.Fila}: el valor total del archivo (H = {Formato.Clp(h)}) no corresponde a ROUND(F×G) = " +
-                           $"{Formato.Cantidad(q)} × {Formato.Clp(vu)} = {Formato.Clp(calculado)}; se usa {Formato.Clp(calculado)} (diferencia {Formato.Clp(h - calculado)}).");
+                avisos.Add($"Fila {f.Fila}: valor total ingresado a mano (H = {Formato.Clp(h)}); F×G daría {Formato.Cantidad(q)} × {Formato.Clp(vu)} = " +
+                           $"{Formato.Clp(calculado)} (diferencia {Formato.Clp(Montos.RedondearExcel(h) - calculado)}). Se usa el valor de H.");
         }
         return avisos;
     }
@@ -94,6 +95,8 @@ public static class ProduccionReglas
                 errores.Add(new(f.Fila, "Valor unitario bruto", $"Debe ser mayor que 0 (vino {Mostrar(f.ValorUnitario)})"));
             if (f.Cantidad is null or <= 0)
                 errores.Add(new(f.Fila, "Cantidad", $"Debe ser mayor que 0 (vino {Mostrar(f.Cantidad)})"));
+            if (f.TotalArchivo is <= 0)
+                errores.Add(new(f.Fila, "Valor total bruto", $"Debe ser mayor que 0 (vino {Mostrar(f.TotalArchivo)})"));
         }
 
         if (!algunaFila)

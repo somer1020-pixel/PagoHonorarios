@@ -111,6 +111,8 @@ Los catálogos (áreas, glosas, bancos, tipos de cuenta y de gasto) se cargan de
 
 Formato de la exportación del sistema (TODO(diseño), pregunta abierta 5): XLSX o CSV con títulos `Rut; Nombre; Job; Nombre Job; Glosa; Valor unitario; Cantidad; Tipo cuenta; Cuenta; Banco`. En CSV, decimales con coma (`85,28`); el punto es separador de miles.
 
+Valor total bruto (columna H): puede venir con la fórmula `ROUND(F*G,0)` o escrito a mano; la plataforma usa el valor de H tal como viene (si no viene, calcula F×G) y avisa las filas donde H difiere de F×G. La exportación conserva los valores manuales.
+
 ## Despliegue (Windows Server)
 
 1. Instalar IIS y el **ASP.NET Core Hosting Bundle (.NET 10)**; SQL Server Express.

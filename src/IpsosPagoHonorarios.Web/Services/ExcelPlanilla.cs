@@ -64,7 +64,9 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
             ws.Cell(fila, 5).FormulaA1 = $"VLOOKUP(D{fila},Formato!$D$2:$E$500,2,FALSE)";
             ws.Cell(fila, 6).Value = l.ValorUnitarioBruto;
             ws.Cell(fila, 7).Value = l.Cantidad;
-            ws.Cell(fila, 8).FormulaA1 = $"ROUND(F{fila}*G{fila},0)";
+            // Fórmula si el total corresponde a F×G; si se ingresó a mano, se conserva el valor.
+            if (l.ValorTotalBruto == Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad)) ws.Cell(fila, 8).FormulaA1 = $"ROUND(F{fila}*G{fila},0)";
+            else ws.Cell(fila, 8).Value = l.ValorTotalBruto;
             ws.Cell(fila, 9).Value = l.Prestador.RutPlanilla;
             ws.Cell(fila, 10).Value = l.Prestador.NombreCompleto;
             ws.Cell(fila, 11).SetValue(l.NumeroBoleta ?? "").Style.NumberFormat.Format = "@";
@@ -206,6 +208,7 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
         ["nombre job"] = "nombrejob", ["job book number name"] = "nombrejob",
         ["glosa"] = "glosa", ["nombre glosa"] = "glosa",
         ["valor unitario"] = "vu", ["valor unitario bruto"] = "vu", ["valor"] = "vu",
+        ["valor total"] = "total", ["valor total bruto"] = "total", ["total"] = "total",
         ["cantidad"] = "q", ["tipo cuenta"] = "tipo", ["tipo de cuenta"] = "tipo", ["cuenta"] = "cuenta", ["banco"] = "banco",
         ["n° boleta"] = "boleta", ["boleta"] = "boleta", ["tipo de gasto"] = "tg", ["tipo gasto"] = "tg"
     };
@@ -241,7 +244,7 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
             filas.Add(new FilaProduccion
             {
                 Fila = r + 1, TipoGasto = V(f, "tg"), Job = V(f, "job"), NombreJob = V(f, "nombrejob"), Glosa = V(f, "glosa"),
-                ValorUnitario = ParseNumero(V(f, "vu")), Cantidad = ParseNumero(V(f, "q")), Rut = V(f, "rut"), Nombre = V(f, "nombre"),
+                ValorUnitario = ParseNumero(V(f, "vu")), Cantidad = ParseNumero(V(f, "q")), TotalArchivo = ParseNumero(V(f, "total")), Rut = V(f, "rut"), Nombre = V(f, "nombre"),
                 NumeroBoleta = V(f, "boleta"), TipoCuenta = V(f, "tipo"), Cuenta = V(f, "cuenta"), Banco = V(f, "banco")
             });
         }

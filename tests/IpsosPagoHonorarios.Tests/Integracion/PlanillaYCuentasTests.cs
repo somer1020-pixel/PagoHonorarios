@@ -250,6 +250,44 @@ public class PlanillaYCuentasTests
     }
 
     [Fact]
+    public async Task TotalManualEnH_SeUsa_SeExportaYCuadraConLaBoleta()
+    {
+        var (e, p, pr) = await DataProcessingAsync();
+        using var _e = e;
+        var bytes = await e.Excel.ExportarAsync(p);
+        using (var wb = new XLWorkbook(new MemoryStream(bytes)))
+        {
+            var h = wb.Worksheet("Planilla").Cell(16, 8);     // línea 8: Ignacio 45 × $250
+            h.Value = 13127;                                    // valor escrito a mano en vez de la fórmula
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            bytes = ms.ToArray();
+        }
+        var r = await e.Produccion.ImportarAsync(new SolicitudImportacion(p.CicloId, p.AreaId, "Costo Directo", p.ResponsableNombre, p.ResponsableEmail,
+            TipoArchivoProduccion.Finanzas, "manual.xlsx", bytes));
+        Assert.True(r.Cargada);
+        Assert.Contains(r.Avisos, a => a.Contains("Fila 16") && a.Contains("Se usa el valor de H"));
+        var pl = await e.RecargarAsync(r.Planilla!);
+        Assert.Equal(13127m, pl.Lineas.Single(l => l.Numero == 8).ValorTotalBruto);
+        Assert.Equal(221441m, pl.Activas().Sum(l => l.ValorTotalBruto));
+
+        // La boleta por la suma de H (130,12 × 250 = 32.530 + 13.127) cuadra.
+        var ign = pr["ign"];
+        var sub = await e.SubirAsync(pl, ign, "77", 45657m);
+        Assert.True(sub.Conciliacion.Cuadra, string.Join(" ", sub.Conciliacion.Problemas));
+        pl = await e.RecargarAsync(pl);
+        var c = Flujo.Revisar(pl, ign.Id);
+        Assert.Equal(Chequeo.Ok, c.Operativa);
+        Assert.Contains("línea 8", c.DetalleOperativa);
+
+        // La exportación conserva el valor manual (sin reemplazarlo por la fórmula).
+        using var wb2 = new XLWorkbook(new MemoryStream(await e.Excel.ExportarAsync(pl)));
+        Assert.False(wb2.Worksheet("Planilla").Cell(16, 8).HasFormula);
+        Assert.Equal(13127d, wb2.Worksheet("Planilla").Cell(16, 8).Value.GetNumber());
+        Assert.Equal(221441d, wb2.Worksheet("Planilla").Cell("B3").Value.GetNumber());
+    }
+
+    [Fact]
     public async Task R21_AvisoAlGenerarsePago()
     {
         using var e = new Entorno();

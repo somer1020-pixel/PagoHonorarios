@@ -85,6 +85,7 @@ else
                 }
                 <div class="text-13">
                     @if (s.Tributaria != Chequeo.Ok) { <div>Tributaria: @(s.DetalleTributaria == "Sin boleta" ? "falta la boleta." : "el monto de la boleta no cuadra con la suma de sus filas.")</div> }
+                    @if (s.DetalleOperativa is not null) { <div>Operativa: @s.DetalleOperativa.</div> }
                     @if (s.Bancaria != Chequeo.Ok) { <div>Bancaria: @s.DetalleBancaria.@(cta?.RegistradaPor is { } rp && cta.Origen == CuentaOrigen.Registro ? $" Registrada por {rp}." : "")</div> }
                     @if (b?.Canal == BoletaCanal.Operaciones) { <div>Boleta cargada por Operaciones: @b.MotivoCargaOperaciones</div> }
                     @if (s.Personal == Chequeo.Ok && s.Operativa == Chequeo.Ok && s.Tributaria == Chequeo.Ok && s.Bancaria == Chequeo.Ok) { <div class="muted">Los cuatro chequeos están OK.</div> }
