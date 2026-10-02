@@ -1,0 +1,118 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Panel del ciclo";
+    ViewData["Activo"] = "panel";
+    var c = Model.Ciclo;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(c?.Codigo ?? "—")</div>
+        <h1>Panel del ciclo</h1>
+        <div class="rol">Rol: Operaciones · Finanzas · Admin</div>
+    </div>
+    @if (c is not null)
+    {
+        @Badge.Html(c.Estado == CicloEstado.Abierto ? Tono.Info : Tono.Success, c.Estado == CicloEstado.Abierto ? "Ciclo abierto" : "Ciclo cerrado")
+    }
+</div>
+@if (c is null)
+{
+    <div class="aviso aviso-info">Aún no hay ciclos. Carga la producción para crear el primero.</div>
+    <a class="btn btn-primary align-self-start" href="/Ciclos/Produccion">Cargar producción</a>
+}
+else
+{
+    @if (Model.Devolucion is { } d)
+    {
+        <div class="alerta-plazo" role="status" data-vence="@Badge.IsoUtc(d.VenceEn)" data-vencido-clase="alerta-plazo vencido">
+            <span class="cuenta-regresiva" data-cd>—</span>
+            <div class="flex-fill text-13"><strong>@d.Planilla?.Area?.Nombre v@(d.Version) fue devuelta por Finanzas.</strong>
+                Vence @Formato.FechaHora(d.VenceEn). Lo que no se corrija a tiempo pasa al ciclo siguiente.</div>
+            <a class="btn btn-primary" href="/Ciclos/Correcciones?planilla=@d.PlanillaId">Ir a correcciones</a>
+        </div>
+    }
+    else if (Model.Vencida is { } v)
+    {
+        <div class="alerta-plazo vencido" role="status">
+            <span class="tag tag-solido-danger">Plazo vencido</span>
+            <div class="flex-fill text-13">Las filas con observaciones abiertas de @v.Planilla.Area.Nombre pasaron a Diferida (ciclo siguiente).</div>
+            <a class="btn btn-secondary" href="/Ciclos/Correcciones?planilla=@v.PlanillaId">Ver correcciones</a>
+        </div>
+    }
+    <ol class="pasos" aria-label="Pasos del ciclo">
+        @foreach (var p in Model.Pasos)
+        {
+            <li>
+                @if (p.Clase == "parcial")
+                {
+                    var pct = Model.BoletasEsperadas == 0 ? 0 : 100 * Model.BoletasRecibidas / Model.BoletasEsperadas;
+                    <span class="barra" style="background:linear-gradient(90deg,var(--teal) @(pct)%,var(--border) @(pct)%)"></span>
+                }
+                else
+                {
+                    <span class="barra @p.Clase"></span>
+                }
+                <strong>@p.Paso</strong><span class="est">@p.Estado</span>
+            </li>
+        }
+    </ol>
+    <div class="kpis">
+        <div class="kpi"><span class="etq">Prestadores</span><span class="val">@Model.Prestadores</span></div>
+        <div class="kpi"><span class="etq">Cantidad</span><span class="val">@Formato.Cantidad(Model.Cantidad)</span></div>
+        <div class="kpi"><span class="etq">Monto total bruto</span><span class="val">@Formato.Clp(Model.Bruto)</span></div>
+        <div class="kpi"><span class="etq">Líquido (por boleta)</span><span class="val">@Formato.Clp(Model.Liquido)</span></div>
+        <div class="kpi"><span class="etq">Boletas recibidas</span><span class="val">@Model.BoletasRecibidas/@Model.BoletasEsperadas</span></div>
+    </div>
+    <div class="solo-movil pila">
+        @foreach (var p in Model.Planillas)
+        {
+            var (r, e) = Model.BoletasDe(p);
+            var (_, url) = IndexModel.Accion(p);
+            <a href="@url" class="tarjeta compacta text-decoration-none" style="color:inherit;min-height:44px">
+                <div class="d-flex justify-content-between gap-2"><strong>@p.Area.Nombre v@(p.Version)</strong>@Badge.De(p.Estado)</div>
+                <span class="text-13 tabular">@p.Activas().Count() líneas · @Formato.Clp(p.Activas().Sum(l => l.ValorTotalBruto)) · boletas @r/@e</span>
+            </a>
+        }
+    </div>
+    <div class="tarjeta compacta solo-escritorio">
+        <h2>Planillas por área</h2>
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>Área</th><th>Versión</th><th>Responsable</th><th class="num">Líneas</th><th class="num">Monto</th><th>Boletas</th><th>Estado</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var p in Model.Planillas)
+                {
+                    var (r, e) = Model.BoletasDe(p);
+                    var (txt, url) = IndexModel.Accion(p);
+                    <tr>
+                        <td><strong>@p.Area.Nombre</strong></td>
+                        <td class="mono text-12">v@(p.Version)</td>
+                        <td>@p.ResponsableNombre</td>
+                        <td class="num">@p.Activas().Count()</td>
+                        <td class="num">@Formato.Clp(p.Activas().Sum(l => l.ValorTotalBruto))</td>
+                        <td class="tabular">@r/@e</td>
+                        <td>@Badge.De(p.Estado)</td>
+                        <td><a href="@url">@txt</a></td>
+                    </tr>
+                }
+                @if (Model.Planillas.Count == 0)
+                {
+                    <tr><td colspan="8" class="muted">Sin planillas en este ciclo. <a href="/Ciclos/Produccion">Cargar producción</a>.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+<div class="tarjeta compacta">
+    <h2>Bitácora reciente</h2>
+    <ul class="list-unstyled m-0 d-flex flex-column gap-2 text-13">
+        @foreach (var a in Model.Bitacora)
+        {
+            <li class="bitacora">
+                <span class="tabular muted">@Formato.FechaHora(a.Fecha)</span><span>@a.Usuario</span><span>@a.Accion@(a.Detalle is null ? "" : ": " + a.Detalle)</span>
+            </li>
+        }
+    </ul>
+</div>

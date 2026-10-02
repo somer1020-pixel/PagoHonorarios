@@ -1,0 +1,112 @@
+@inject ContextoLayout Ctx
+@{
+    var autenticado = User.Identity?.IsAuthenticated == true;
+    var interno = Roles.Internos.Any(User.IsInRole);
+    if (interno) { await Ctx.CargarAsync(); }
+    var activo = ViewData["Activo"] as string ?? "";
+    var nombre = User.FindFirst("nombre")?.Value ?? User.Identity?.Name;
+    var rol = Roles.Todos.FirstOrDefault(User.IsInRole) ?? "—";
+    var rolTexto = User.IsInRole(Roles.Admin) ? "Admin" : rol;
+    var nav = new (string Grupo, (string Id, string Texto, string Icono, string Url, int N)[] Items)[]
+    {
+        ("Cuenta", autenticado ? [] : [("ingreso", "Ingreso", "bi-box-arrow-in-right", "/Cuenta/Login", 0)]),
+        ("Ciclo de pago", [
+            ("panel", "Panel del ciclo", "bi-speedometer2", "/", 0),
+            ("produccion", "Producción", "bi-cloud-download", "/Ciclos/Produccion", 0),
+            ("validacion", "Validación de cuentas", "bi-shield-check", "/Ciclos/ValidacionCuentas", Ctx.AlertasCuenta),
+            ("planilla", "Planilla de pagos", "bi-table", "/Ciclos/Planilla", 0),
+            ("seguimiento", "Seguimiento boletas", "bi-file-earmark-pdf", "/Boletas/Seguimiento", Ctx.BoletasPendientes),
+            ("correcciones", "Correcciones", "bi-pencil-square", "/Ciclos/Correcciones", Ctx.ObservacionesAbiertas)]),
+        ("Finanzas", [("revision", "Revisión", "bi-clipboard-check", "/Finanzas/Revision", 0), ("pagos", "Pagos y cierre", "bi-bank", "/Finanzas/Pagos", 0)]),
+        ("Maestros", [("prestadores", "Prestadores", "bi-people", "/Maestros/Prestadores", 0), ("jobs", "Jobs y glosas", "bi-briefcase", "/Maestros/Jobs", 0)]),
+        ("Consulta", [("historial", "Historial", "bi-archive", "/Ciclos/Historial", 0)])
+    };
+}
+<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Pago de Honorarios</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="topbar">
+    <a class="marca" href="/"><span class="monograma" aria-hidden="true">Ip</span><span class="app">Pago de Honorarios</span></a>
+    @if (interno && Ctx.Ciclos.Count > 0)
+    {
+        <form class="ciclo" method="get" action="/Ciclos/Seleccionar">
+            <label for="sel-ciclo" class="txt">Ciclo</label>
+            <select id="sel-ciclo" name="codigo" onchange="this.form.submit()">
+                @foreach (var c in Ctx.Ciclos)
+                {
+                    <option value="@c.Codigo" selected="@(c.Id == Ctx.Ciclo?.Id)">@c.Codigo</option>
+                }
+            </select>
+            <input type="hidden" name="volver" value="@Context.Request.Path" />
+            <noscript><button class="btn btn-sm btn-salir">Ver</button></noscript>
+        </form>
+    }
+    <span class="espaciador"></span>
+    @if (interno && Ctx.DevolucionActiva is { } dev)
+    {
+        <a class="pildora pildora-warning" href="/Ciclos/Correcciones?planilla=@dev.PlanillaId" data-vence="@Badge.IsoUtc(dev.VenceEn)"
+           data-prefijo="Corrección vence en " data-vencido-texto="Plazo vencido · filas diferidas" data-vencido-clase="pildora pildora-danger"
+           title="@Ctx.DevolucionArea v@(dev.Version) devuelta por Finanzas">
+            <i class="bi bi-stopwatch" aria-hidden="true"></i><span data-cd>Corrección vence pronto</span>
+        </a>
+    }
+    @if (autenticado)
+    {
+        <span class="usuario">@nombre · <span class="rol-top">@rolTexto</span></span>
+        <form method="post" action="/Cuenta/Logout" asp-antiforgery="true" class="m-0"><button type="submit" class="btn btn-sm btn-salir">Salir</button></form>
+    }
+    else
+    {
+        <span class="usuario">Sin sesión · <span class="rol-top">—</span></span>
+    }
+</header>
+<nav class="chips" aria-label="Menú principal">
+    @foreach (var g in nav)
+    {
+        foreach (var it in g.Items)
+        {
+            <a href="@it.Url" aria-current="@(it.Id == activo ? "page" : null)">@it.Texto@(it.N > 0 ? $" · {it.N}" : "")</a>
+        }
+    }
+</nav>
+<div class="marco">
+    <nav class="sidenav" aria-label="Navegación">
+        @foreach (var g in nav.Where(g => g.Items.Length > 0))
+        {
+            <div class="d-flex flex-column gap-1">
+                <div class="grupo">@g.Grupo</div>
+                @foreach (var it in g.Items)
+                {
+                    <a href="@it.Url" aria-current="@(it.Id == activo ? "page" : null)">
+                        <i class="bi @it.Icono" aria-hidden="true"></i><span class="t">@it.Texto</span>
+                        @if (it.N > 0) { <span class="contador" aria-label="@it.N pendientes">@it.N</span> }
+                    </a>
+                }
+            </div>
+        }
+    </nav>
+    <main class="contenido" id="contenido">
+        @if (TempData["MensajeOk"] is string ok)
+        {
+            <div class="aviso aviso-success" role="status">@ok</div>
+        }
+        @if (TempData["MensajeError"] is string err)
+        {
+            <div class="aviso aviso-danger" role="alert">@err</div>
+        }
+        @RenderBody()
+    </main>
+</div>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

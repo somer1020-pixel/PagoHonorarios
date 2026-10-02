@@ -1,0 +1,139 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Ciclos.ProduccionModel
+@{
+    ViewData["Title"] = "Producción";
+    ViewData["Activo"] = "produccion";
+    var r = Model.Resultado;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(Model.Ciclo?.Codigo ?? "—") / Producción</div>
+        <h1>Cargar producción</h1>
+        <div class="rol">Rol: Operaciones (Finanzas: lectura)</div>
+    </div>
+    @if (Model.Resumen is not null) { @Badge.De(Model.Resumen.Estado) } else { @Badge.Html(Tono.Neutral, "Borrador") }
+</div>
+@if (Model.AvisoVentana is not null)
+{
+    <div class="aviso aviso-warning">@Model.AvisoVentana</div>
+}
+else
+{
+    <div class="aviso aviso-info">Hoy @Formato.Fecha(DateOnly.FromDateTime(Formato.ALocal(DateTime.UtcNow))) · dentro de la ventana de descarga (días 28 a 30). Fuera de ella se puede cargar, con aviso.</div>
+}
+<div class="grid-5-6">
+    <form method="post" enctype="multipart/form-data" class="tarjeta">
+        <h2>Archivo</h2>
+        <fieldset disabled="@(!Model.PuedeCargar)" class="d-flex flex-column gap-3">
+            <div class="seg" role="radiogroup" aria-label="Tipo de archivo">
+                <label><input type="radio" name="TipoArchivo" value="Exportacion" checked="@(Model.TipoArchivo == TipoArchivoProduccion.Exportacion)" />Exportación del sistema (XLSX/CSV)</label>
+                <label><input type="radio" name="TipoArchivo" value="Finanzas" checked="@(Model.TipoArchivo == TipoArchivoProduccion.Finanzas)" />Planilla formato Finanzas</label>
+            </div>
+            <label class="zona-carga">
+                <i class="bi bi-upload fs-3" aria-hidden="true"></i>
+                <strong>Arrastra o selecciona un archivo XLSX o CSV</strong>
+                <span class="text-12">Exportación: columnas Rut, Nombre, Job, Nombre Job, Glosa, Valor unitario, Cantidad, Tipo cuenta, Cuenta, Banco. En CSV, decimales con coma (85,28).</span>
+                <input type="file" name="Archivo" accept=".xlsx,.csv" required />
+            </label>
+            <div class="campos-2">
+                <div>
+                    <label class="form-label" for="p-area">Área responsable</label>
+                    <select id="p-area" name="AreaId" class="form-select" required>
+                        @foreach (var a in Model.Areas)
+                        {
+                            <option value="@a.Id" selected="@(a.Id == Model.AreaId)">@a.Nombre</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="p-tg">Tipo de gasto</label>
+                    <select id="p-tg" name="TipoGasto" class="form-select" required>
+                        @foreach (var t in Model.TiposGasto)
+                        {
+                            <option selected="@(t == Model.TipoGasto)">@t</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label" for="p-r">Responsable</label>
+                    <input id="p-r" name="Responsable" class="form-control" value="@Model.Responsable" required />
+                </div>
+                <div>
+                    <label class="form-label" for="p-m">Correo del responsable</label>
+                    <input id="p-m" name="ResponsableEmail" type="email" class="form-control" value="@Model.ResponsableEmail" required />
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary align-self-start">Importar y generar planilla</button>
+        </fieldset>
+        @if (!Model.PuedeCargar) { <p class="m-0 text-12 muted">Solo lectura para tu rol.</p> }
+    </form>
+    <div class="pila">
+        <div class="tarjeta">
+            <div class="d-flex align-items-center gap-2"><h2 class="flex-fill">Resultado de la importación</h2>
+                @if (r is not null)
+                {
+                    @(r.Cargada ? Badge.Html(Tono.Success, "Cargada") : Badge.Html(Tono.Danger, $"Rechazada · {r.Errores.Count} errores"))
+                }
+            </div>
+            @if (r is null)
+            {
+                <p class="m-0 text-13 muted">Sube un archivo para validarlo. Un archivo con errores no se carga: se listan las filas y el motivo.</p>
+            }
+            else if (!r.Cargada)
+            {
+                <p class="m-0 text-13">El archivo no se cargó. Corrige las filas y vuelve a subirlo.</p>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead><tr><th>Fila</th><th>Campo</th><th>Motivo</th></tr></thead>
+                        <tbody>
+                        @foreach (var e in r.Errores)
+                        {
+                            <tr><td class="tabular">@(e.Fila == 0 ? "—" : e.Fila)</td><td>@e.Campo</td><td>@e.Motivo</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (r is not null && r.Avisos.Count > 0)
+            {
+                <div class="text-13 d-flex flex-column gap-1"><strong>Avisos @(r.Cargada ? "" : "(se aplican al cargar sin errores)")</strong>
+                    @foreach (var a in r.Avisos) { <span>@a</span> }
+                </div>
+            }
+        </div>
+        @if (Model.Planillas.Count > 0)
+        {
+            <div class="tarjeta compacta">
+                <h2>Planillas del ciclo</h2>
+                <div class="fila">
+                    @foreach (var p in Model.Planillas)
+                    {
+                        <a class="btn btn-sm @(p.Id == Model.Resumen?.Id ? "btn-primary" : "btn-secondary")" href="?planilla=@p.Id">@p.Area.Nombre v@(p.Version)</a>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+@if (Model.Resumen is { } res)
+{
+    var grupos = res.Activas().GroupBy(l => (l.Job.JobBookNumber, l.Glosa.NombreGlosa)).ToList();
+    <div class="tarjeta compacta">
+        <div class="d-flex align-items-center gap-2 flex-wrap"><h2 class="flex-fill">Resumen por Job y glosa · @res.Area.Nombre v@(res.Version) (recibida @Formato.Fecha(res.FechaRecepcion))</h2><a href="/Ciclos/Planilla?id=@res.Id">Ver planilla</a></div>
+        <div class="table-responsive">
+            <table class="table">
+                <thead><tr><th>Job</th><th>Nombre</th><th>Glosa</th><th>Item</th><th class="num">Líneas</th><th class="num">Cantidad</th><th class="num">Monto</th></tr></thead>
+                <tbody>
+                @foreach (var g in grupos)
+                {
+                    var f = g.First();
+                    <tr><td class="mono text-12">@f.Job.JobBookNumber</td><td>@f.Job.Nombre</td><td>@f.Glosa.NombreGlosa</td><td class="mono text-12">@f.Glosa.Item</td>
+                        <td class="num">@g.Count()</td><td class="num">@Formato.Cantidad(g.Sum(l => l.Cantidad))</td><td class="num">@Formato.Clp(g.Sum(l => l.ValorTotalBruto))</td></tr>
+                }
+                <tr><td colspan="4"><strong>Total</strong></td><td class="num"><strong>@res.Activas().Count()</strong></td>
+                    <td class="num"><strong>@Formato.Cantidad(res.Activas().Sum(l => l.Cantidad))</strong></td><td class="num"><strong>@Formato.Clp(res.Activas().Sum(l => l.ValorTotalBruto))</strong></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

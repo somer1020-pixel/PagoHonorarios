@@ -1,0 +1,68 @@
+@model IpsosPagoHonorarios.Web.Pages.Cuenta.RecuperarModel
+@{
+    var activar = Model.Activacion;
+    ViewData["Title"] = activar ? "Activa tu cuenta" : "Recuperar contraseña";
+    ViewData["Activo"] = "ingreso";
+}
+<div class="encabezado">
+    <div>
+        <h1>@ViewData["Title"]</h1>
+        <div class="d-flex gap-2 align-items-center text-13 muted mt-1"><code>@(activar ? "/Cuenta/Activar" : "/Cuenta/Recuperar")</code>Rol: Todos</div>
+    </div>
+    @Badge.Html(Tono.Neutral, "Sin sesión")
+</div>
+<div class="ingreso-grid">
+    @if (Model.Listo)
+    {
+        <div class="tarjeta">
+            <div class="aviso aviso-success">Listo: tu contraseña quedó definida.</div>
+            <a class="btn btn-primary" href="/Cuenta/Login">Ingresar</a>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(Model.T))
+    {
+        <form method="post" class="tarjeta">
+            <span class="kicker">Enlace de un solo uso · 72 horas</span>
+            <h2>@(activar ? "Activa tu cuenta" : "Nueva contraseña")</h2>
+            <p class="m-0 text-13">Tu usuario es tu RUT o tu correo.</p>
+            <div>
+                <label class="form-label" for="usr">Usuario</label>
+                <input id="usr" class="form-control mono" value="@(IpsosPagoHonorarios.Core.RutHelper.Formatear(Model.U ?? ""))" readonly />
+            </div>
+            <input type="hidden" name="U" value="@Model.U" />
+            <input type="hidden" name="T" value="@Model.T" />
+            <div>
+                <label class="form-label" for="p1">Nueva contraseña</label>
+                <input id="p1" name="Contrasena" type="password" class="form-control" autocomplete="new-password" required minlength="8" />
+            </div>
+            <div>
+                <label class="form-label" for="p2">Repite la contraseña</label>
+                <input id="p2" name="Repetir" type="password" class="form-control" autocomplete="new-password" required minlength="8" />
+            </div>
+            <p class="m-0 text-12 muted">Mínimo 8 caracteres, con al menos una minúscula y un número. TODO(diseño): política de contraseña definitiva.</p>
+            @foreach (var e in Model.Errores)
+            {
+                <div class="aviso aviso-danger" role="alert">@e</div>
+            }
+            <button type="submit" class="btn btn-primary w-100">@(activar ? "Activar y entrar" : "Guardar contraseña")</button>
+        </form>
+    }
+    else
+    {
+        <form method="post" class="tarjeta">
+            <span class="kicker">/Cuenta/Recuperar</span>
+            <h2>Recuperar contraseña</h2>
+            <p class="m-0 text-13">Te enviaremos un enlace a tu correo registrado, válido por 72 horas. No enviamos SMS.</p>
+            @if (Model.Enviado)
+            {
+                <div class="aviso aviso-success" role="status">Si el usuario tiene correo registrado, enviamos el enlace.</div>
+            }
+            <div>
+                <label class="form-label" for="rc">Correo o RUT</label>
+                <input id="rc" name="CorreoORut" class="form-control mono" placeholder="12.345.678-5" required />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Enviar enlace</button>
+            <div class="aviso aviso-info">¿No tienes correo registrado? Contacta a Operaciones: te restablecerán la contraseña o te entregarán el enlace por tu canal habitual.</div>
+        </form>
+    }
+</div>

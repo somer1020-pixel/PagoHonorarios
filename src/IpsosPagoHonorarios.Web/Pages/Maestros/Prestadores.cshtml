@@ -1,0 +1,162 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Maestros.PrestadoresModel
+@{
+    ViewData["Title"] = "Prestadores";
+    ViewData["Activo"] = "prestadores";
+    var s = Model.Sel;
+    var carga = Model.ResultadoCarga?.Split('|', 5);
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Maestros / Prestadores</div>
+        <h1>Prestadores</h1>
+        <div class="rol">Rol: Operaciones · Finanzas (validar cuentas: solo Finanzas)</div>
+    </div>
+    @if (Model.PuedeValidar) { <a class="btn btn-secondary" href="#carga-inicial">Carga inicial de cuentas</a> }
+    @if (Model.PuedeEditar) { <a class="btn btn-primary" href="?nuevo=true">Nuevo prestador</a> }
+</div>
+<div class="grid-2">
+    <div class="tarjeta tabla d-flex flex-column gap-2">
+        <form method="get" class="d-flex gap-2 m-0">
+            <label class="visually-hidden" for="q">Buscar</label>
+            <input id="q" name="q" class="form-control" placeholder="Buscar por nombre o RUT" value="@Model.Q" />
+            <button class="btn btn-secondary">Buscar</button>
+        </form>
+        <table class="table">
+            <thead><tr><th>Prestador</th><th>Cuenta registrada</th><th>Portal</th></tr></thead>
+            <tbody>
+            @foreach (var p in Model.Lista)
+            {
+                var c = p.Cuentas.FirstOrDefault(x => x.Vigente);
+                var (tono, txt) = PrestadoresModel.Portal(p);
+                <tr class="@(p.Id == s?.Id ? "sel" : null)">
+                    <td><a href="?id=@p.Id" class="text-decoration-none" style="color:inherit"><div>@p.NombreCompleto</div><div class="sub">@p.RutUi</div></a></td>
+                    <td>@if (c is null) { @Badge.Html(Tono.Neutral, "Sin cuenta") }
+                        else { <div class="mono text-12 nowrap">@c.TipoCuenta · @c.Cuenta · @c.Banco</div> @(c.Estado == CuentaEstado.PendienteValidacion ? Badge.Html(Tono.Warning, "Pendiente") : Badge.De(c.Estado)) }</td>
+                    <td>@Badge.Html(tono, txt)</td>
+                </tr>
+            }
+            @if (Model.Lista.Count == 0) { <tr><td colspan="3" class="muted">Sin resultados.</td></tr> }
+            </tbody>
+        </table>
+    </div>
+    <div class="pila">
+        @if (s is not null || Model.Nuevo)
+        {
+            <form method="post" asp-page-handler="Guardar" asp-route-id="@s?.Id" class="tarjeta">
+                <span class="kicker">@(s is null ? "Nuevo prestador" : "Editar prestador")</span>
+                <fieldset disabled="@(!Model.PuedeEditar)" class="d-flex flex-column gap-3">
+                    <div><label class="form-label" for="pr-n">Nombre completo</label><input id="pr-n" name="nombre" class="form-control" value="@s?.NombreCompleto" required /></div>
+                    <div><label class="form-label" for="pr-r">RUT</label><input id="pr-r" name="rut" class="form-control mono" value="@s?.RutUi" data-rut-vivo="pr-r-badge" aria-describedby="pr-r-msg" required /></div>
+                    <div id="pr-r-msg" class="d-flex gap-2 align-items-center text-12"><span id="pr-r-badge" class="tag tag-neutral">—</span><span>Validación módulo 11, en vivo.</span></div>
+                    <div class="campos-2">
+                        <div><label class="form-label" for="pr-e">Correo</label><input id="pr-e" name="email" type="email" class="form-control" value="@s?.Email" /></div>
+                        <div><label class="form-label" for="pr-t">Teléfono</label><input id="pr-t" name="telefono" class="form-control" value="@s?.Telefono" /></div>
+                    </div>
+                    <span class="text-12 muted">Correo o teléfono: al menos uno.</span>
+                    <button class="btn btn-primary align-self-start">Guardar</button>
+                </fieldset>
+            </form>
+        }
+        @if (s is not null)
+        {
+            var vigente = s.Cuentas.FirstOrDefault(c => c.Vigente);
+            var historial = s.Cuentas.Where(c => !c.Vigente).OrderByDescending(c => c.Id).ToList();
+            <div class="tarjeta">
+                <h2>Cuentas bancarias</h2>
+                <div class="text-13">Titular: <span class="mono">@s.RutUi</span> (fijo = RUT del prestador)</div>
+                @if (vigente is null)
+                {
+                    <div class="aviso aviso-neutral">Sin cuenta vigente registrada.</div>
+                }
+                else
+                {
+                    <div class="aviso aviso-neutral d-flex align-items-center gap-3">
+                        <div class="flex-fill"><div><strong>Vigente</strong> · @vigente.TipoCuenta · @vigente.Banco</div><div class="mono">@vigente.Cuenta</div>
+                            <div class="text-12 muted">@(vigente.Origen == CuentaOrigen.CargaInicial ? "Carga inicial" : "Registrada por " + vigente.RegistradaPor) · @Formato.FechaHora(vigente.RegistradaEn)
+                                @(vigente.ValidadaPor is null ? "" : $" · validada por {vigente.ValidadaPor}")</div></div>
+                        @Badge.De(vigente.Estado)
+                    </div>
+                    @if (vigente.Estado == CuentaEstado.PendienteValidacion)
+                    {
+                        <div class="fila">
+                            <form method="post" asp-page-handler="Validar" asp-route-id="@s.Id" class="m-0"><input type="hidden" name="cuentaId" value="@vigente.Id" />
+                                <button class="btn btn-primary btn-sm" disabled="@(!Model.PuedeValidar)">Validar (Finanzas)</button></form>
+                            <form method="post" asp-page-handler="Rechazar" asp-route-id="@s.Id" class="m-0"><input type="hidden" name="cuentaId" value="@vigente.Id" />
+                                <button class="btn btn-secondary btn-sm" disabled="@(!Model.PuedeValidar)">Rechazar</button></form>
+                        </div>
+                    }
+                }
+                @foreach (var h in historial)
+                {
+                    <div class="text-12 muted d-flex flex-wrap gap-1 align-items-center">Historial: @h.TipoCuenta · @h.Banco · <span class="mono">@h.Cuenta</span> · @Badge.De(h.Estado) @(h.ReemplazadaEn is null ? "" : "reemplazada " + Formato.Fecha(h.ReemplazadaEn.Value))</div>
+                }
+                @if (Model.PuedeEditar)
+                {
+                    <details class="text-13">
+                        <summary class="fw-bold" style="cursor:pointer">Registrar cambio de cuenta</summary>
+                        <form method="post" asp-page-handler="RegistrarCuenta" asp-route-id="@s.Id" class="mt-3 d-flex flex-column gap-3">
+                            <div class="campos-2">
+                                <div><label class="form-label" for="cc-b">Banco</label><select id="cc-b" name="banco" class="form-select">@foreach (var b in Model.Bancos) { <option>@b</option> }</select></div>
+                                <div><label class="form-label" for="cc-t">Tipo de cuenta</label><select id="cc-t" name="tipo" class="form-select">@foreach (var t in Model.Tipos) { <option>@t</option> }</select></div>
+                                <div><label class="form-label" for="cc-n">Cuenta (6 a 20 dígitos)</label><input id="cc-n" name="cuenta" class="form-control mono" inputmode="numeric" pattern="\d{6,20}" required /></div>
+                                <div><label class="form-label" for="cc-n2">Repite la cuenta</label><input id="cc-n2" name="cuentaRepetida" class="form-control mono" inputmode="numeric" autocomplete="off" required /></div>
+                            </div>
+                            <p class="m-0 text-12 muted">Tipo RUT: banco ESTADO y cuenta = RUT sin dígito verificador. La cuenta queda pendiente hasta que Finanzas la valide; la anterior pasa a Inactiva.</p>
+                            <button class="btn btn-primary btn-sm align-self-start">Registrar cuenta</button>
+                        </form>
+                    </details>
+                }
+            </div>
+            var (tono, txt) = PrestadoresModel.Portal(s);
+            <div class="tarjeta">
+                <h2>Acceso al portal</h2>
+                <div class="text-13 d-flex flex-wrap gap-2 align-items-center">@Badge.Html(tono, txt)
+                    @(s.PortalInvitadoEn is null ? "" : "Invitado " + Formato.Fecha(s.PortalInvitadoEn.Value))@(s.PortalActivadoEn is null ? "" : " · activado " + Formato.Fecha(s.PortalActivadoEn.Value)) · usuario <span class="mono">@s.RutPlanilla</span></div>
+                <form method="post" asp-route-id="@s.Id" class="fila m-0">
+                    <fieldset disabled="@(!Model.PuedeEditar)" class="fila">
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="Invitar" disabled="@(s.Email is null)">Invitar</button>
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="Restablecer">Restablecer contraseña</button>
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="CopiarEnlace">Copiar enlace de activación</button>
+                    </fieldset>
+                </form>
+                @if (Model.Enlace is not null)
+                {
+                    <div class="d-flex gap-2"><input id="enlace" class="form-control form-control-sm mono" value="@Model.Enlace" readonly aria-label="Enlace" /><button type="button" class="btn btn-secondary btn-sm" data-copiar="enlace">Copiar</button></div>
+                }
+                <span class="text-12 muted">Enlace de un solo uso, 72 horas. Sin correo, entrega el enlace por el canal habitual. Toda acción queda en la bitácora.</span>
+            </div>
+        }
+        @if (Model.ARevision.Count > 0)
+        {
+            <div class="tarjeta">
+                <h2>Cuentas pendientes de validación</h2>
+                @foreach (var c in Model.ARevision)
+                {
+                    <div class="d-flex justify-content-between gap-2 text-13 align-items-center">
+                        <a href="?id=@c.PrestadorId">@c.Prestador.NombreCompleto</a>
+                        <span class="mono text-12">@c.TipoCuenta · @c.Banco · @c.Cuenta</span>
+                        @(c.RequiereRevision ? Badge.Html(Tono.Warning, "Carga inicial: varias cuentas") : Badge.Html(Tono.Warning, "Pendiente"))
+                    </div>
+                }
+            </div>
+        }
+        @if (Model.PuedeValidar)
+        {
+            <form method="post" asp-page-handler="CargaInicial" asp-route-id="@s?.Id" enctype="multipart/form-data" class="tarjeta" id="carga-inicial">
+                <h2>Carga inicial de cuentas</h2>
+                <span class="text-12 muted">Planillas anteriores en formato Finanzas, columnas I, O, P, Q · repetible sin duplicar.</span>
+                <label class="zona-carga compacta">Planillas anteriores (XLSX, varias)<input type="file" name="archivos" accept=".xlsx" multiple required /></label>
+                <button class="btn btn-secondary align-self-start">Procesar carga inicial</button>
+                @if (carga is { Length: 5 })
+                {
+                    <div class="d-flex justify-content-between text-13"><span>Cuenta única → Validada como vigente</span>@Badge.Html(Tono.Success, carga[0] + " RUT")</div>
+                    <div class="d-flex justify-content-between text-13"><span>Cuentas distintas → la más reciente; resto Inactiva; a revisión</span>@Badge.Html(Tono.Warning, carga[1] + " RUT")</div>
+                    <div class="d-flex justify-content-between text-13"><span>Misma cuenta en varios RUT → no se asocia</span>@Badge.Html(Tono.Danger, carga[2] + " cuentas")</div>
+                    <div class="d-flex justify-content-between text-13"><span>Ya cargadas u omitidas</span>@Badge.Html(Tono.Neutral, carga[3])</div>
+                    @if (!string.IsNullOrWhiteSpace(carga[4])) { <pre class="text-12 m-0" style="white-space:pre-wrap">@carga[4]</pre> }
+                }
+            </form>
+        }
+    </div>
+</div>

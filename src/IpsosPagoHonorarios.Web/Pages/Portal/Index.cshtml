@@ -1,0 +1,109 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Portal.IndexModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Mis boletas";
+    var pr = Model.Prestador!;
+    var cuenta = pr.Cuentas.FirstOrDefault(c => c.Vigente);
+    var chequeos = Model.Chequeos;
+}
+@foreach (var x in Model.Planillas.Where(x => x.Observaciones.Count > 0))
+{
+    @if (x.Devolucion is { } d && d.VenceEn > DateTime.UtcNow)
+    {
+        <div role="alert" class="aviso aviso-warning d-flex flex-column gap-2" data-vence="@Badge.IsoUtc(d.VenceEn)" data-vencido-clase="aviso aviso-danger d-flex flex-column gap-2">
+            <div class="d-flex justify-content-between align-items-center">@Badge.Html(Tono.Warning, "Boleta observada")<span class="cuenta-regresiva" style="font-size:24px" data-cd>—</span></div>
+            @foreach (var o in x.Observaciones) { <p class="m-0" style="font-size:14px">@o.Detalle</p> }
+            <p class="m-0" style="font-size:14px">El monto correcto es <strong>@Formato.Clp(x.Bruto)</strong>. Emite una nueva boleta y súbela antes de que venza el plazo.</p>
+        </div>
+    }
+    else
+    {
+        <div role="alert" class="aviso aviso-warning">@Badge.Html(Tono.Warning, "Boleta observada") @string.Join(" ", x.Observaciones.Select(o => o.Detalle))</div>
+    }
+}
+@if (Model.Error is not null)
+{
+    <div role="alert" class="aviso aviso-danger">@Model.Error</div>
+}
+@if (Model.Planillas.Count == 0)
+{
+    <section class="tarjeta"><span class="kicker">Boletas por emitir</span><p class="m-0 text-13">No tienes pagos pendientes de boleta.</p></section>
+}
+@foreach (var x in Model.Planillas)
+{
+    var p = x.Planilla;
+    var glosas = x.Lineas.Select(l => l.Glosa.NombreGlosa).Distinct();
+    var jobs = x.Lineas.Select(l => l.Job.JobBookNumber).Distinct();
+    <section class="tarjeta">
+        <span class="kicker">Boleta por emitir · @p.Area.Nombre · @p.Ciclo.Codigo</span>
+        <div class="text-13 d-flex flex-column gap-1">
+            @foreach (var l in x.Lineas)
+            {
+                <div>Job <span class="mono">@l.Job.JobBookNumber</span> · @l.Job.Nombre<br />@l.Glosa.NombreGlosa · @Formato.Cantidad(l.Cantidad) × @Formato.Clp(l.ValorUnitarioBruto)</div>
+            }
+        </div>
+        <div class="d-flex justify-content-between align-items-baseline gap-2"><span class="text-13">Total a boletear (una sola boleta)</span><span class="monto-grande">@Formato.Clp(x.Bruto)</span></div>
+        <div class="aviso aviso-neutral dl-grid" style="background:var(--surface-100)">
+            <span class="muted">Receptor</span><span>@Model.Param.RazonSocialEmpresa</span>
+            <span class="muted">RUT empresa</span><span class="mono">@RutHelper.Formatear(Model.Param.RutEmpresa)</span>
+            <span class="muted">Bruto</span><span class="num">@Formato.Clp(x.Bruto)</span>
+            <span class="muted">Retención @Formato.Porcentaje(Model.Tasa)</span><span class="num">@Formato.Clp(x.Retencion)</span>
+            <span class="muted">Líquido a recibir</span><strong class="num">@Formato.Clp(x.Liquido)</strong>
+            <span class="muted">Glosa sugerida</span><span>@string.Join(" / ", glosas) @p.Ciclo.Codigo Job @string.Join(", ", jobs)</span>
+        </div>
+        @if (x.Boleta is { } b)
+        {
+            <div class="aviso @(b.Cuadra && b.Estado != BoletaEstado.Observada ? "aviso-info" : "aviso-warning") d-flex flex-column gap-2">
+                <div class="d-flex justify-content-between align-items-center gap-2"><strong>Boleta N° @b.NumeroBoleta · @Formato.Clp(b.MontoBruto)</strong>
+                    @(b.Estado == BoletaEstado.Observada ? Badge.Html(Tono.Warning, "Observada") : b.Cuadra ? Badge.Html(Tono.Success, "Coincide") : Badge.Html(Tono.Danger, "No cuadra"))</div>
+                @if (Model.PlanillaResultado == p.Id && chequeos.Count > 0)
+                {
+                    @foreach (var c in chequeos) { <span class="@(c.Ok ? "check-ok" : "check-mal")">@c.Texto</span> }
+                }
+                else if (b.ResultadoValidacion is not null)
+                {
+                    <span class="check-mal">@b.ResultadoValidacion</span>
+                }
+                else { <span class="check-ok">Recibida el @Formato.FechaHora(b.SubidaEn) · @Badge.De(b.Estado)</span> }
+            </div>
+        }
+        @if (x.PuedeSubir.Ok)
+        {
+            <form method="post" asp-page-handler="Subir" enctype="multipart/form-data" class="d-flex flex-column gap-2">
+                <input type="hidden" name="planillaId" value="@p.Id" />
+                <label class="zona-carga" style="min-height:96px">
+                    <i class="bi bi-upload fs-4" aria-hidden="true"></i>
+                    <strong>@(x.Boleta is null ? "Subir PDF de la boleta del SII" : "Reemplazar boleta (PDF del SII)")</strong><span class="text-12">Máx. 2 MB · se valida de inmediato</span>
+                    <input type="file" name="pdf" accept="application/pdf" required />
+                </label>
+                <button class="btn btn-primary btn-44">Subir boleta</button>
+            </form>
+        }
+        else if (x.Boleta is null)
+        {
+            <span class="text-12 muted">@string.Join(" ", x.PuedeSubir.Motivos)</span>
+        }
+    </section>
+}
+<section class="tarjeta">
+    <h2>Mis pagos anteriores</h2>
+    @foreach (var pg in Model.Pagos)
+    {
+        <div class="d-flex justify-content-between align-items-center gap-2 text-13 py-2">
+            <div><div class="mono">@pg.Ciclo · N° @pg.NumeroBoleta</div><div class="muted text-12">Pagado @Formato.Fecha(pg.Fecha) · bruto @Formato.Clp(pg.Bruto)</div></div>
+            <div class="text-end"><div class="tabular fw-bold">@Formato.Clp(pg.Liquido)</div>@Badge.Html(Tono.Success, "Pagada")</div>
+        </div>
+    }
+    @if (Model.Pagos.Count == 0) { <span class="text-13 muted">Aún no tienes pagos registrados.</span> }
+</section>
+<section class="tarjeta">
+    <h2>Mis datos</h2>
+    <dl class="dl-grid">
+        <dt>Nombre</dt><dd>@pr.NombreCompleto</dd>
+        <dt>RUT</dt><dd class="mono">@pr.RutUi</dd>
+        <dt>Correo</dt><dd>@Formato.EnmascararCorreo(pr.Email)</dd>
+        <dt>Cuenta</dt><dd>@(cuenta is null ? "Sin cuenta registrada" : $"{cuenta.TipoCuenta} · {cuenta.Banco} · ")<span class="mono">@(cuenta is null ? "" : Formato.Enmascarar(cuenta.Cuenta))</span></dd>
+    </dl>
+    <span class="text-12 muted">Solo lectura. Para cambiar tu cuenta, contacta a Operaciones.</span>
+</section>

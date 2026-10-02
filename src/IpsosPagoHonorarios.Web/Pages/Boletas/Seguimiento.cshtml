@@ -1,0 +1,141 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Boletas.SeguimientoModel
+@{
+    ViewData["Title"] = "Seguimiento de boletas";
+    ViewData["Activo"] = "seguimiento";
+    var p = Model.P;
+    var pendientes = Model.Filas.Count(f => f.Boleta is null);
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <h1>Seguimiento de boletas</h1>
+        <div class="rol">Rol: Operaciones · Finanzas</div>
+    </div>
+    @if (p is not null)
+    {
+        @Badge.De(p.Estado)
+        <form method="post" asp-page-handler="Recordar" asp-route-planilla="@p.Id" class="m-0">
+            <button class="btn btn-secondary" disabled="@(!Model.PuedeSeguimiento || pendientes == 0)">Recordar a pendientes (@pendientes)</button>
+        </form>
+    }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
+@if (p is not null)
+{
+    var cerrada = p.Estado is PlanillaEstado.Aprobada or PlanillaEstado.EnPago or PlanillaEstado.Cerrada;
+    <div class="grid-7-4">
+        <div class="tarjeta tabla">
+            <table class="table table-ajustada">
+                <thead><tr><th>Prestador</th><th>N° boleta</th><th>Fecha · canal</th><th class="num">Boleta</th><th class="num">Planilla</th><th>Resultado</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var f in Model.Filas)
+                {
+                    var b = f.Boleta;
+                    <tr class="@(f.Prestador.Id == Model.Prestador ? "sel" : null)">
+                        <td><div>@f.Prestador.NombreCompleto</div><div class="sub">@f.Prestador.RutUi</div></td>
+                        <td class="mono text-12">@(b?.NumeroBoleta ?? "—")</td>
+                        <td><div class="tabular">@(b is null ? "—" : Formato.Fecha(b.FechaEmision))</div>
+                            <div class="text-12 muted">@(b is null ? "Pendiente" : b.Canal == BoletaCanal.Operaciones ? "Operaciones*" : "Portal")</div></td>
+                        <td class="num">@Formato.Clp(b?.MontoBruto)</td>
+                        <td class="num">@Formato.Clp(f.Suma)</td>
+                        <td>
+                            @if (b is null) { @Badge.Html(Tono.Neutral, "Sin boleta") }
+                            else if (b.MontoBruto != f.Suma) { @Badge.Html(Tono.Danger, "Diferencia " + Formato.Clp((b.MontoBruto ?? 0) - f.Suma)) }
+                            else if (!b.Cuadra) { @Badge.Html(Tono.Danger, "No cuadra") }
+                            else { @Badge.Html(Tono.Success, "Coincide") }
+                        </td>
+                        <td><a class="btn btn-ghost btn-sm" href="?planilla=@p.Id&prestador=@f.Prestador.Id" aria-label="Ver @f.Prestador.NombreCompleto">Ver</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p class="m-0 mt-2 text-12 muted">* Operaciones: boleta cargada en nombre del prestador (contingencia).</p>
+        </div>
+        <div class="pila">
+            @if (Model.Sel is { } s)
+            {
+                var b = s.Boleta;
+                <div class="tarjeta">
+                    <div class="d-flex flex-wrap align-items-center gap-2"><h2 class="flex-fill">Datos extraídos</h2>@if (b is not null) { @Badge.De(b.Confianza) }</div>
+                    <div class="text-13"><strong>@s.Prestador.NombreCompleto</strong></div>
+                    @if (b is null)
+                    {
+                        <p class="m-0 text-13">Sin boleta recibida. Envía un recordatorio o cárgala en su nombre.</p>
+                    }
+                    else
+                    {
+                        <dl class="dl-grid">
+                            <dt>N° boleta</dt><dd class="mono">@(b.NumeroBoleta ?? "—")</dd>
+                            <dt>RUT emisor</dt><dd class="mono">@(b.RutEmisor is null ? "—" : RutHelper.Formatear(b.RutEmisor.Value, b.RutEmisorDv!))</dd>
+                            <dt>RUT receptor</dt><dd class="mono">@(b.RutReceptor is null ? "—" : RutHelper.Formatear(b.RutReceptor))</dd>
+                            <dt>Fecha emisión</dt><dd class="tabular">@Formato.Fecha(b.FechaEmision)</dd>
+                            <dt>Total honorarios</dt><dd class="tabular">@Formato.Clp(b.MontoBruto)</dd>
+                            <dt>Impto. retenido</dt><dd class="tabular">@Formato.Clp(b.MontoRetencion)</dd>
+                            <dt>Total (líquido)</dt><dd class="tabular">@Formato.Clp(b.MontoLiquido)</dd>
+                            <dt>Suma planilla</dt><dd class="tabular">@Formato.Clp(s.Suma)</dd>
+                            <dt>Estado</dt><dd>@Badge.De(b.Estado)</dd>
+                        </dl>
+                        @if (b.ResultadoValidacion is not null)
+                        {
+                            <div class="aviso aviso-danger text-12">@b.ResultadoValidacion</div>
+                        }
+                        @if (b.MotivoCargaOperaciones is not null)
+                        {
+                            <div class="aviso aviso-neutral text-12"><strong>Motivo de carga por Operaciones:</strong> @b.MotivoCargaOperaciones</div>
+                        }
+                        <div class="fila">
+                            <form method="post" asp-page-handler="Confirmar" asp-route-planilla="@p.Id" asp-route-prestador="@s.Prestador.Id" class="m-0">
+                                <input type="hidden" name="boletaId" value="@b.Id" />
+                                <button class="btn btn-primary btn-sm" disabled="@(!Model.PuedeSeguimiento || b.Estado == BoletaEstado.Confirmada || cerrada)">Confirmar datos</button>
+                            </form>
+                            <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#corregir" disabled="@(!Model.PuedeSeguimiento || cerrada)">Corregir lectura</button>
+                            <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#pedir" disabled="@(!Model.PuedeSeguimiento || cerrada)">Pedir nueva boleta</button>
+                            <a class="btn btn-ghost btn-sm" href="?handler=Pdf&boletaId=@b.Id" target="_blank" rel="noopener">Ver PDF</a>
+                        </div>
+                        <form method="post" asp-page-handler="Corregir" asp-route-planilla="@p.Id" asp-route-prestador="@s.Prestador.Id" class="collapse" id="corregir">
+                            <input type="hidden" name="boletaId" value="@b.Id" />
+                            <div class="campos-2">
+                                <div><label class="form-label" for="cn">N° boleta</label><input id="cn" name="numero" class="form-control form-control-sm mono" value="@b.NumeroBoleta" /></div>
+                                <div><label class="form-label" for="cf">Fecha (dd-mm-aaaa)</label><input id="cf" name="fecha" class="form-control form-control-sm" value="@Formato.Fecha(b.FechaEmision)" /></div>
+                                <div><label class="form-label" for="ce">RUT emisor</label><input id="ce" name="rutEmisor" class="form-control form-control-sm mono" value="@(b.RutEmisor is null ? "" : $"{b.RutEmisor}-{b.RutEmisorDv}")" /></div>
+                                <div><label class="form-label" for="cr">RUT receptor</label><input id="cr" name="rutReceptor" class="form-control form-control-sm mono" value="@b.RutReceptor" placeholder="@Model.RutEmpresa" /></div>
+                                <div><label class="form-label" for="cb">Bruto</label><input id="cb" name="bruto" class="form-control form-control-sm" value="@b.MontoBruto?.ToString("0")" /></div>
+                                <div><label class="form-label" for="ct">Retención</label><input id="ct" name="retencion" class="form-control form-control-sm" value="@b.MontoRetencion?.ToString("0")" /></div>
+                                <div><label class="form-label" for="cl">Líquido</label><input id="cl" name="liquido" class="form-control form-control-sm" value="@b.MontoLiquido?.ToString("0")" /></div>
+                            </div>
+                            <button class="btn btn-primary btn-sm mt-2">Guardar lectura</button>
+                        </form>
+                        <form method="post" asp-page-handler="PedirNueva" asp-route-planilla="@p.Id" asp-route-prestador="@s.Prestador.Id" class="collapse" id="pedir">
+                            <input type="hidden" name="boletaId" value="@b.Id" />
+                            <label class="form-label" for="pm">Motivo</label>
+                            <textarea id="pm" name="motivo" class="form-control" rows="2" required>@(b.MontoBruto != s.Suma ? $"La boleta es por {Formato.Clp(b.MontoBruto)}, pero el monto correcto es {Formato.Clp(s.Suma)}." : "")</textarea>
+                            <button class="btn btn-primary btn-sm mt-2">Pedir nueva boleta</button>
+                        </form>
+                    }
+                </div>
+            }
+            <form method="post" asp-page-handler="Cargar" asp-route-planilla="@p.Id" enctype="multipart/form-data" class="tarjeta">
+                <h2>Cargar en nombre del prestador</h2>
+                <fieldset disabled="@(!Model.PuedeOperaciones || cerrada)" class="d-flex flex-column gap-3">
+                    <div><label class="form-label" for="cn-p">Prestador</label>
+                        <select id="cn-p" name="prestadorId" class="form-select">
+                            @foreach (var f in Model.Filas.OrderBy(f => f.Boleta is not null))
+                            {
+                                <option value="@f.Prestador.Id" selected="@(f.Prestador.Id == Model.Prestador)">@f.Prestador.NombreCompleto · @f.Prestador.RutUi</option>
+                            }
+                        </select></div>
+                    <label class="zona-carga compacta">PDF de la boleta (máx. 2 MB)<input type="file" name="pdf" accept="application/pdf" required /></label>
+                    <div><label class="form-label" for="cn-m">Motivo (obligatorio)</label>
+                        <textarea id="cn-m" name="motivo" class="form-control" rows="2" required placeholder="Ej.: el prestador envió el PDF por correo"></textarea></div>
+                    <p class="m-0 text-12 muted">Mismas validaciones que el portal. Queda con canal Operaciones, en la bitácora y se avisa al prestador por correo.</p>
+                    <button class="btn btn-primary align-self-start">Cargar boleta</button>
+                </fieldset>
+            </form>
+        </div>
+    </div>
+}
+else
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo.</div>
+}

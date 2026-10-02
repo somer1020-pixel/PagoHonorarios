@@ -1,0 +1,66 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Cuenta.LoginModel
+@{
+    ViewData["Title"] = "Ingreso";
+    ViewData["Activo"] = "ingreso";
+}
+<div class="encabezado">
+    <div>
+        <h1>Ingreso</h1>
+        <div class="d-flex gap-2 align-items-center text-13 muted mt-1"><code>/Cuenta/Login</code>Rol: Todos</div>
+    </div>
+    @Badge.Html(Tono.Neutral, "Sin sesión")
+</div>
+<div class="ingreso-grid">
+    <form method="post" class="tarjeta">
+        <span class="kicker">Equipo interno y prestadores</span>
+        <h2>Ingresar</h2>
+        <div>
+            <label class="form-label" for="u">Correo o RUT</label>
+            <input id="u" name="Usuario" value="@Model.Usuario" class="form-control mono" autocomplete="username" required autofocus />
+        </div>
+        <div>
+            <label class="form-label" for="p">Contraseña</label>
+            <input id="p" name="Contrasena" type="password" class="form-control" autocomplete="current-password" required />
+        </div>
+        <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+        @if (Model.TurnstileKey is not null)
+        {
+            <div class="cf-turnstile" data-sitekey="@Model.TurnstileKey"></div>
+            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+        }
+        @if (Model.Error is not null)
+        {
+            <div role="alert" class="aviso aviso-danger">@Model.Error</div>
+        }
+        <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+        <a href="#recuperar" class="text-13">Olvidé mi contraseña</a>
+        <p class="m-0 text-12 muted">Equipo interno: tu correo. Prestadores: tu RUT. Solo contraseña, sin segundo factor.</p>
+        @if (Model.EsDemo)
+        {
+            <div class="aviso aviso-neutral text-12">
+                <strong>Demo (Development):</strong> contraseña <span class="mono">@IpsosPagoHonorarios.Web.Data.SemillaDemo.Contrasena</span> para
+                andres.paredes@@ejemplo.cl (Operaciones), carolina.diaz@@ejemplo.cl (Finanzas), admin@@ejemplo.cl (Admin) o el RUT
+                <span class="mono">17.345.120-2</span> (prestadora Valentina).
+            </div>
+        }
+    </form>
+    <div class="tarjeta">
+        <span class="kicker">/Cuenta/Activar</span>
+        <h2>Activa tu cuenta</h2>
+        <p class="m-0 text-13">Tu usuario es tu RUT. Recibirás un enlace de activación por correo: es de un solo uso y vence en 72 horas.</p>
+        <p class="m-0 text-13">¿No tienes correo registrado? Operaciones te entregará el enlace por tu canal habitual.</p>
+        <div class="d-flex gap-2 align-items-center text-12">@Badge.Html(Tono.Danger, "Enlace vencido")Pide uno nuevo a Operaciones.</div>
+    </div>
+    <form method="post" action="/Cuenta/Recuperar" asp-antiforgery="true" class="tarjeta" id="recuperar">
+        <span class="kicker">/Cuenta/Recuperar</span>
+        <h2>Recuperar contraseña</h2>
+        <p class="m-0 text-13">Te enviaremos un enlace a tu correo registrado, válido por 72 horas. No enviamos SMS.</p>
+        <div>
+            <label class="form-label" for="rc">Correo o RUT</label>
+            <input id="rc" name="CorreoORut" class="form-control mono" placeholder="12.345.678-5" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-100">Enviar enlace</button>
+        <div class="aviso aviso-info">¿No tienes correo registrado? Contacta a Operaciones: te restablecerán la contraseña o te entregarán el enlace por tu canal habitual.</div>
+    </form>
+</div>

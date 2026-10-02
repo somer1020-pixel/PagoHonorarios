@@ -1,0 +1,76 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Maestros.JobsModel
+@{
+    ViewData["Title"] = "Jobs y glosas";
+    ViewData["Activo"] = "jobs";
+    var j = Model.Sel;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Maestros / Jobs y catálogos</div>
+        <h1>Jobs y glosas</h1>
+        <div class="rol">Rol: Finanzas mantiene · Operaciones lee</div>
+    </div>
+    @if (Model.PuedeMantener) { <button type="button" class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#form-job">Nuevo Job</button> }
+</div>
+@if (Model.PuedeMantener)
+{
+    <form method="post" asp-page-handler="Job" class="tarjeta collapse @(j is null ? "" : "show")" id="form-job">
+        <h2>@(j is null ? "Nuevo Job" : "Editar Job")</h2>
+        <input type="hidden" name="id" value="@j?.Id" />
+        <div class="campos-3">
+            <div><label class="form-label" for="jb">Job Book Number (12 dígitos)</label><input id="jb" name="jobBookNumber" class="form-control mono" value="@j?.JobBookNumber" pattern="\d{12}" required /></div>
+            <div><label class="form-label" for="jn">Nombre</label><input id="jn" name="nombre" class="form-control" value="@j?.Nombre" required /></div>
+            <div><label class="form-label" for="ja">Área sugerida</label>
+                <select id="ja" name="areaId" class="form-select"><option value="">—</option>@foreach (var a in Model.Areas) { <option value="@a.Id" selected="@(a.Id == j?.AreaSugeridaId)">@a.Nombre</option> }</select></div>
+            <div><label class="form-label" for="jv">Valor unitario sugerido</label><input id="jv" name="valorUnitario" class="form-control" value="@j?.ValorUnitarioSugerido?.ToString("0.##")" inputmode="decimal" /></div>
+            <div class="d-flex align-items-end"><label class="d-flex gap-2 align-items-center"><input type="checkbox" name="activo" value="true" checked="@(j?.Activo ?? true)" /> Activo</label></div>
+        </div>
+        <button class="btn btn-primary align-self-start">Guardar Job</button>
+    </form>
+}
+<div class="tarjeta tabla">
+    <h2 class="p-2">Jobs</h2>
+    <table class="table">
+        <thead><tr><th>Job Book Number</th><th>Nombre</th><th>Área sugerida</th><th class="num">Valor unitario sugerido</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var x in Model.Jobs)
+        {
+            <tr><td class="mono text-12">@x.JobBookNumber</td><td>@x.Nombre</td><td>@(x.AreaSugerida?.Nombre ?? "—")</td><td class="num">@Formato.Clp(x.ValorUnitarioSugerido)</td>
+                <td>@(x.Activo ? Badge.Html(Tono.Success, "Activo") : Badge.Html(Tono.Neutral, "Inactivo"))</td>
+                <td>@if (Model.PuedeMantener) { <a href="?editar=@x.Id">Editar</a> }</td></tr>
+        }
+        </tbody>
+    </table>
+</div>
+<div class="grid-3-2">
+    <div class="tarjeta tabla">
+        <h2 class="p-2">Glosas (ítem presupuestario)</h2>
+        <table class="table">
+            <thead><tr><th>Nombre glosa</th><th>Item</th><th>Cuenta contable</th></tr></thead>
+            <tbody>
+            @foreach (var g in Model.Glosas)
+            {
+                <tr><td>@g.NombreGlosa</td><td class="mono">@g.Item</td><td class="mono">@g.CuentaContable</td></tr>
+            }
+            </tbody>
+        </table>
+        @if (Model.PuedeMantener)
+        {
+            <form method="post" asp-page-handler="Glosa" class="d-flex flex-wrap gap-2 align-items-end p-2">
+                <div><label class="form-label" for="gn">Nombre glosa</label><input id="gn" name="nombreGlosa" class="form-control form-control-sm" required /></div>
+                <div><label class="form-label" for="gi">Item</label><input id="gi" name="item" class="form-control form-control-sm mono" style="width:90px" required /></div>
+                <div><label class="form-label" for="gc">Cuenta contable</label><input id="gc" name="cuentaContable" class="form-control form-control-sm mono" style="width:110px" required /></div>
+                <button class="btn btn-secondary btn-sm">Agregar glosa</button>
+            </form>
+        }
+    </div>
+    <div class="campos-2">
+        <div class="tarjeta"><span class="kicker">Áreas</span><span class="text-13">@foreach (var a in Model.Areas) { <span>@a.Nombre <span class="mono">@a.CodigoArea</span></span><br /> }</span></div>
+        <div class="tarjeta"><span class="kicker">Bancos</span><span class="text-13">@string.Join(" · ", Model.Bancos.Select(b => $"{b.Nombre} {(string.IsNullOrEmpty(b.CodigoBanco) ? "—" : b.CodigoBanco)}"))</span>
+            <span class="text-12" style="color:var(--warning)">TODO(diseño): BANEFE y SANTANDER comparten código 37; faltan códigos de algunos bancos.</span></div>
+        <div class="tarjeta"><span class="kicker">Tipos de cuenta</span><span class="text-13">@string.Join(" · ", Model.Tipos.Select(t => t.Nombre))</span></div>
+        <div class="tarjeta"><span class="kicker">Tipos de gasto</span><span class="text-13">@string.Join(" · ", Model.Gastos.Select(t => t.Nombre))</span></div>
+    </div>
+</div>
+<p class="m-0 text-12 muted">Los catálogos se cargan desde CSV (hoja Formato de Finanzas). Nombres exactos al catálogo de Finanzas.</p>

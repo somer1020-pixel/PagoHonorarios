@@ -1,0 +1,124 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Ciclos.CorreccionesModel
+@{
+    ViewData["Title"] = "Correcciones";
+    ViewData["Activo"] = "correcciones";
+    var p = Model.P;
+    var d = Model.Devolucion;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <h1>Correcciones</h1>
+        <div class="rol">Rol: Operaciones corrige · Finanzas acepta o reabre</div>
+    </div>
+    @if (p is not null) { @Badge.De(p.Estado) }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
+@if (p is null)
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo.</div>
+}
+else
+{
+    @if (d is not null)
+    {
+        var pendiente = d.Resultado == DevolucionResultado.Pendiente;
+        <div class="banda-plazo">
+            <div class="d-flex flex-column">
+                <span class="text-12" style="color:var(--border)">Tiempo para reenviar</span>
+                @if (pendiente)
+                {
+                    <span class="grande" data-vence="@Badge.IsoUtc(d.VenceEn)" data-vencido-clase="vencido" data-vencido-texto="Plazo vencido"><span data-cd>—</span></span>
+                }
+                else if (d.Resultado == DevolucionResultado.Vencida)
+                {
+                    <span class="vencido">Plazo vencido</span>
+                }
+                else
+                {
+                    <span class="vencido" style="color:#4cc98a">Reenviada a tiempo</span>
+                }
+            </div>
+            <dl>
+                <dt>Devuelta por</dt><dd>@d.DevueltaPor (Finanzas)</dd>
+                <dt>Devuelta</dt><dd class="tabular">@Formato.FechaHora(d.DevueltaEn)</dd>
+                <dt>Vence</dt><dd class="tabular">@Formato.FechaHora(d.VenceEn)</dd>
+                <dt>Al vencer</dt><dd>Las filas de prestadores con observaciones abiertas se difieren a @Model.CicloSiguiente.</dd>
+            </dl>
+            <form method="post" asp-page-handler="Reenviar" asp-route-planilla="@p.Id" class="m-0 d-flex flex-column gap-2">
+                <button class="btn btn-primary" style="background:#fff;color:var(--navy);border-color:#fff" disabled="@(!pendiente || !Model.PuedeOperar || p.Estado != PlanillaEstado.Observada)">Reenviar a Finanzas (v@(p.Version + 1))</button>
+                @if (Model.EsDemo && pendiente)
+                {
+                    <button class="btn btn-sm btn-ghost" style="color:var(--border)" formaction="?handler=SimularVencimiento&planilla=@p.Id" title="Solo en Development (simularVencido)">Simular vencimiento (demo)</button>
+                }
+            </form>
+        </div>
+    }
+    else
+    {
+        <div class="aviso aviso-neutral">Esta planilla no ha sido devuelta por Finanzas.</div>
+    }
+    <div class="grid-2">
+        @foreach (var o in Model.Observaciones)
+        {
+            var l = o.LineaPago;
+            var tributaria = o.Tipo is ObservacionTipo.FaltaBoleta or ObservacionTipo.DiferenciaMontos;
+            <article class="tarjeta">
+                <div class="d-flex align-items-center gap-2"><span class="kicker flex-fill">Línea @l.Numero · @o.Tipo.Nombre()</span>@Badge.De(o.Estado)</div>
+                <div class="fw-semibold">@l.Prestador.NombreCompleto</div>
+                <div class="text-13"><strong>Campo:</strong> @o.Campo</div>
+                <p class="m-0 text-13">@o.Detalle</p>
+                @if (o.Estado == ObservacionEstado.Abierta && Model.PuedeOperar && l.Estado != LineaEstado.Diferida)
+                {
+                    <div class="fila">
+                        @if (tributaria)
+                        {
+                            <a class="btn btn-primary btn-sm" href="/Boletas/Seguimiento?planilla=@p.Id&prestador=@l.PrestadorId">@(o.Tipo == ObservacionTipo.FaltaBoleta ? "Cargar en nombre del prestador" : "Pedir nueva boleta")</a>
+                        }
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#corr-@o.Id">Marcar corregida</button>
+                        <form method="post" asp-page-handler="Diferir" asp-route-planilla="@p.Id" class="m-0">
+                            <input type="hidden" name="lineaId" value="@l.Id" />
+                            <button class="btn btn-secondary btn-sm">Diferir línea</button>
+                        </form>
+                    </div>
+                    <form method="post" asp-page-handler="Corregir" asp-route-planilla="@p.Id" class="collapse" id="corr-@o.Id">
+                        <input type="hidden" name="observacionId" value="@o.Id" />
+                        @if (!tributaria)
+                        {
+                            <div class="campos-2 mb-2">
+                                <div><label class="form-label" for="q-@o.Id">Cantidad (G)</label><input id="q-@o.Id" name="cantidad" class="form-control form-control-sm" placeholder="@Formato.Cantidad(l.Cantidad)" inputmode="decimal" /></div>
+                                <div><label class="form-label" for="v-@o.Id">Valor unitario (F)</label><input id="v-@o.Id" name="valorUnitario" class="form-control form-control-sm" placeholder="@l.ValorUnitarioBruto.ToString("0.##")" inputmode="decimal" /></div>
+                            </div>
+                        }
+                        <label class="form-label" for="r-@o.Id">Respuesta</label>
+                        <textarea id="r-@o.Id" name="respuesta" class="form-control" rows="2" required></textarea>
+                        <button class="btn btn-primary btn-sm mt-2">Guardar corrección</button>
+                    </form>
+                }
+                @if (o.Estado == ObservacionEstado.Vencida || l.Estado == LineaEstado.Diferida)
+                {
+                    <div class="text-13" style="color:var(--danger)">Filas diferidas a la planilla @p.Area.Nombre de @Model.CicloSiguiente.</div>
+                }
+                @if (o.Respuesta is not null)
+                {
+                    <div class="aviso aviso-neutral"><strong>Respuesta de Operaciones:</strong> @o.Respuesta</div>
+                }
+                @if (o.Estado == ObservacionEstado.Corregida)
+                {
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="text-12 muted flex-fill">Finanzas:</span>
+                        <form method="post" asp-page-handler="Aceptar" asp-route-planilla="@p.Id" class="m-0"><input type="hidden" name="observacionId" value="@o.Id" />
+                            <button class="btn btn-primary btn-sm" disabled="@(!Model.PuedeRevisar)">Aceptar</button></form>
+                        <form method="post" asp-page-handler="Reabrir" asp-route-planilla="@p.Id" class="m-0"><input type="hidden" name="observacionId" value="@o.Id" />
+                            <button class="btn btn-secondary btn-sm" disabled="@(!Model.PuedeRevisar)">Reabrir</button></form>
+                    </div>
+                }
+            </article>
+        }
+    </div>
+    @if (Model.Observaciones.Count == 0)
+    {
+        <div class="aviso aviso-neutral">Sin observaciones en esta planilla.</div>
+    }
+}

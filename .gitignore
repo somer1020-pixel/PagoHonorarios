@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+TestResults/
+publish/
+# Datos locales: base SQLite de desarrollo y archivos subidos (boletas, comprobantes, ZIP)
+**/App_Data/
+*.db
+*.db-shm
+*.db-wal

@@ -1,0 +1,124 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Finanzas.RevisionModel
+@{
+    ViewData["Title"] = "Revisión";
+    ViewData["Activo"] = "revision";
+    var p = Model.P;
+    var abiertas = Model.Observaciones.Count(o => o.Estado == ObservacionEstado.Abierta);
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Finanzas / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <h1>Revisión</h1>
+        <div class="rol">Rol: Finanzas</div>
+    </div>
+    @if (p is not null) { @Badge.De(p.Estado) }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
+@if (p is null)
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo.</div>
+}
+else
+{
+    var enRevision = p.Estado == PlanillaEstado.EnRevision;
+    @if (p.Estado is PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta)
+    {
+        <div class="aviso aviso-neutral">Operaciones aún no envía esta planilla a Finanzas.</div>
+    }
+    else if (p.Estado == PlanillaEstado.Observada)
+    {
+        <div class="aviso aviso-warning">Planilla devuelta a Operaciones. <a href="/Ciclos/Correcciones?planilla=@p.Id">Ver correcciones</a>.</div>
+    }
+    <div class="tarjeta tabla">
+        <table class="table table-ajustada">
+            <thead><tr><th>Prestador</th><th>Personal</th><th>Operativa</th><th>Tributaria</th><th>Bancaria</th><th class="num">Planilla</th><th class="num">Boleta</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var c in Model.Chequeos)
+            {
+                var pr = p.Lineas.First(l => l.PrestadorId == c.PrestadorId).Prestador;
+                var (tono, txt) = Model.EstadoDe(c.PrestadorId);
+                <tr class="@(c.PrestadorId == Model.Prestador ? "sel" : null)">
+                    <td><div>@pr.NombreCompleto</div><div class="sub">@pr.RutUi</div></td>
+                    <td>@Badge.De(c.Personal)</td>
+                    <td>@Badge.De(c.Operativa)</td>
+                    <td>@Badge.De(c.Tributaria, c.DetalleTributaria)</td>
+                    <td>@Badge.De(c.Bancaria, c.DetalleBancaria)</td>
+                    <td class="num">@Formato.Clp(c.SumaPlanilla)</td>
+                    <td class="num">@Formato.Clp(c.MontoBoleta)</td>
+                    <td>@Badge.Html(tono, txt)</td>
+                    <td><a class="btn btn-ghost btn-sm" href="?planilla=@p.Id&prestador=@c.PrestadorId">Detalle</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <div class="grid-2">
+        @if (Model.Sel is { } s)
+        {
+            var lineas = p.Activas().Where(l => l.PrestadorId == s.PrestadorId).OrderBy(l => l.Numero).ToList();
+            var pr = lineas[0].Prestador;
+            var b = p.BoletaVigente(s.PrestadorId);
+            var cta = pr.Cuentas.FirstOrDefault(c => c.Vigente);
+            <div class="tarjeta">
+                <span class="kicker">Detalle del prestador</span>
+                <div class="fw-semibold">@pr.NombreCompleto · <span class="mono">@pr.RutUi</span></div>
+                <ul class="m-0 ps-3 text-13 d-flex flex-column gap-1">
+                    @foreach (var l in lineas)
+                    {
+                        <li>Línea @l.Numero · Job <span class="mono">@l.Job.JobBookNumber</span> · @l.Glosa.NombreGlosa · @Formato.Cantidad(l.Cantidad) × @Formato.Clp(l.ValorUnitarioBruto) = <strong>@Formato.Clp(l.ValorTotalBruto)</strong></li>
+                    }
+                </ul>
+                <div class="text-13"><strong>Boleta:</strong> @(b is null ? "Sin boleta" : $"N° {b.NumeroBoleta} · {Formato.Clp(b.MontoBruto)} · {Formato.Fecha(b.FechaEmision)} · canal {b.Canal}")
+                    @if (b is not null) { <a href="/Boletas/Seguimiento?handler=Pdf&boletaId=@b.Id" target="_blank" rel="noopener">Ver PDF</a> }</div>
+                <div class="text-13 d-flex flex-wrap gap-2 align-items-center"><strong>Cuenta registrada:</strong>
+                    @if (cta is null) { <span>Sin cuenta</span> }
+                    else { <span class="mono">@cta.TipoCuenta · @cta.Banco · @cta.Cuenta</span> @Badge.De(cta.Estado) }</div>
+                @if (cta is { Estado: CuentaEstado.PendienteValidacion })
+                {
+                    <div class="fila">
+                        <form method="post" asp-page-handler="ValidarCuenta" asp-route-planilla="@p.Id" asp-route-prestador="@s.PrestadorId" class="m-0">
+                            <input type="hidden" name="cuentaId" value="@cta.Id" /><button class="btn btn-primary btn-sm">Validar cuenta</button></form>
+                        <form method="post" asp-page-handler="RechazarCuenta" asp-route-planilla="@p.Id" asp-route-prestador="@s.PrestadorId" class="m-0">
+                            <input type="hidden" name="cuentaId" value="@cta.Id" /><button class="btn btn-secondary btn-sm">Rechazar</button></form>
+                    </div>
+                }
+                <div class="text-13">
+                    @if (s.Tributaria != Chequeo.Ok) { <div>Tributaria: @(s.DetalleTributaria == "Sin boleta" ? "falta la boleta." : "el monto de la boleta no cuadra con la suma de sus filas.")</div> }
+                    @if (s.Bancaria != Chequeo.Ok) { <div>Bancaria: @s.DetalleBancaria.@(cta?.RegistradaPor is { } rp && cta.Origen == CuentaOrigen.Registro ? $" Registrada por {rp}." : "")</div> }
+                    @if (b?.Canal == BoletaCanal.Operaciones) { <div>Boleta cargada por Operaciones: @b.MotivoCargaOperaciones</div> }
+                    @if (s.Personal == Chequeo.Ok && s.Operativa == Chequeo.Ok && s.Tributaria == Chequeo.Ok && s.Bancaria == Chequeo.Ok) { <div class="muted">Los cuatro chequeos están OK.</div> }
+                </div>
+            </div>
+        }
+        <form method="post" asp-page-handler="Observar" asp-route-planilla="@p.Id" asp-route-prestador="@Model.Prestador" class="tarjeta">
+            <h2>Nueva observación</h2>
+            <fieldset disabled="@(!enRevision)" class="d-flex flex-column gap-3">
+                <div class="campos-2">
+                    <div><label class="form-label" for="ob-l">Línea</label>
+                        <select id="ob-l" name="lineaId" class="form-select">
+                            @foreach (var l in p.Activas().OrderBy(l => l.Numero))
+                            {
+                                <option value="@l.Id" selected="@(l.PrestadorId == Model.Prestador)">Línea @l.Numero · @l.Prestador.NombreCompleto</option>
+                            }
+                        </select></div>
+                    <div><label class="form-label" for="ob-t">Tipo</label>
+                        <select id="ob-t" name="tipo" class="form-select">
+                            @foreach (var t in Enum.GetValues<ObservacionTipo>()) { <option value="@t">@t.Nombre()</option> }
+                        </select></div>
+                </div>
+                <div><label class="form-label" for="ob-c">Campo</label><input id="ob-c" name="campo" class="form-control" required placeholder="Ej.: Monto boleta" /></div>
+                <div><label class="form-label" for="ob-d">Detalle</label><textarea id="ob-d" name="detalle" class="form-control" rows="3" required></textarea></div>
+                <button class="btn btn-secondary align-self-start">Agregar observación</button>
+            </fieldset>
+            <div class="text-13" style="color:var(--warning)">@abiertas observaciones abiertas en esta planilla.</div>
+        </form>
+    </div>
+    <div class="d-flex justify-content-end gap-3 align-items-center flex-wrap">
+        <span class="text-13 muted">@(Model.Aprobacion is { Ok: false } a && enRevision ? string.Join(" ", a.Motivos) : "Aprobar requiere 0 observaciones abiertas, cuentas validadas y boletas cuadradas.")</span>
+        <form method="post" asp-page-handler="Devolver" asp-route-planilla="@p.Id" class="m-0">
+            <button class="btn btn-advertencia" disabled="@(!enRevision || abiertas == 0)">Devolver planilla (plazo 1 hora)</button></form>
+        <form method="post" asp-page-handler="Aprobar" asp-route-planilla="@p.Id" class="m-0">
+            <button class="btn btn-primary" disabled="@(Model.Aprobacion?.Ok != true)">Aprobar planilla</button></form>
+    </div>
+}

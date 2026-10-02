@@ -1,0 +1,7 @@
+@page
+@{
+    ViewData["Title"] = "Acceso denegado";
+    HttpContext.Response.StatusCode = 403;
+}
+<div class="encabezado"><div><h1>Acceso denegado</h1><div class="rol">Tu rol no tiene permiso para esta pantalla.</div></div>@Badge.Html(Tono.Danger, "403")</div>
+<a class="btn btn-secondary align-self-start" href="/">Volver al inicio</a>

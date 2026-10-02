@@ -1,0 +1,14 @@
+# Cloudflare Tunnel (cloudflared como servicio de Windows). Reemplaza <dominio> y el ID del túnel.
+# Dos hostnames sobre la misma aplicación IIS:
+#   honorarios.<dominio> → equipo interno, protegido además con Cloudflare Access (Zero Trust).
+#   boletas.<dominio>    → prestadores, sin Access; la app solo sirve /Portal, /Cuenta y estáticos
+#                          (Publicacion:HostPrestadores = "boletas.<dominio>").
+tunnel: <ID-DEL-TUNEL>
+credentials-file: C:\ProgramData\cloudflared\<ID-DEL-TUNEL>.json
+
+ingress:
+  - hostname: honorarios.<dominio>
+    service: http://localhost:80
+  - hostname: boletas.<dominio>
+    service: http://localhost:80
+  - service: http_status:404

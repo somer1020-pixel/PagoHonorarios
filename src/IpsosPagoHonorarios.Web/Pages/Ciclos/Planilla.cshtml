@@ -1,0 +1,94 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Ciclos.PlanillaModel
+@{
+    ViewData["Title"] = "Planilla de pagos";
+    ViewData["Activo"] = "planilla";
+    var p = Model.P;
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / Planilla</div>
+        <h1>Planilla de pagos</h1>
+        <div class="rol">Rol: Operaciones edita · Finanzas lee</div>
+    </div>
+    @if (p is not null) { @Badge.De(p.Estado) }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Id, "id")' />
+@if (p is null)
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo. <a href="/Ciclos/Produccion">Cargar producción</a>.</div>
+}
+else
+{
+    var activas = p.Activas().OrderBy(l => l.Numero).ToList();
+    var diferidas = p.Lineas.Where(l => l.Estado == LineaEstado.Diferida).OrderBy(l => l.Numero).ToList();
+    var mostrarPlanilla = p.Estado is PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta;
+    var diferibles = activas.Where(l => l.Estado is LineaEstado.PendienteBoleta or LineaEstado.Observada || l.AlertaAbierta).ToList();
+    <div class="tarjeta compacta encab-planilla text-13">
+        <span class="muted">B1 · Fecha de Recepción</span><strong class="tabular">@p.FechaRecepcion.ToString("dd/MM/yyyy")</strong><span></span>
+        <span class="muted">B2 · Nombre del Responsable</span><strong>@p.ResponsableNombre</strong><span></span>
+        <span class="muted">B3 · Monto Total a pago</span><strong class="tabular">@Formato.Clp(activas.Sum(l => l.ValorTotalBruto))</strong><code class="mono text-12 muted">=SUM(H9:H3007)</code>
+        <span class="muted">B4 · Área Responsable</span><strong>@p.Area.Nombre</strong><span></span>
+        <span class="muted">B5 · Código Área Responsable</span><strong class="mono">@p.Area.CodigoArea</strong><code class="mono text-12 muted">VLOOKUP</code>
+    </div>
+    <div class="fila">
+        <a class="btn btn-secondary" href="?handler=Xlsx&id=@p.Id"><i class="bi bi-download" aria-hidden="true"></i> Descargar XLSX (formato Finanzas)</a>
+        @if (Model.PuedeOperar && diferibles.Count > 0 && p.Estado is not (PlanillaEstado.Aprobada or PlanillaEstado.EnPago or PlanillaEstado.Cerrada))
+        {
+            <form method="post" asp-page-handler="Diferir" asp-route-id="@p.Id" class="d-flex gap-2 m-0">
+                <label class="visually-hidden" for="dif">Línea a diferir</label>
+                <select id="dif" name="lineaId" class="form-select form-select-sm" style="max-width:260px">
+                    @foreach (var l in diferibles) { <option value="@l.Id">Línea @l.Numero · @l.Prestador.NombreCompleto</option> }
+                </select>
+                <button class="btn btn-secondary">Diferir línea seleccionada</button>
+            </form>
+        }
+        <span class="flex-fill mono text-12 muted">@Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Area.Nombre, p.Version)</span>
+        @if (p.Estado == PlanillaEstado.Observada)
+        {
+            <form method="post" asp-page-handler="Reenviar" asp-route-id="@p.Id" class="m-0">
+                <button class="btn btn-primary" disabled="@(!Model.PuedeOperar || Model.Devolucion is null)">Reenviar a Finanzas</button>
+            </form>
+        }
+        else if (p.Estado is PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta)
+        {
+            <form method="post" asp-page-handler="Enviar" asp-route-id="@p.Id" class="m-0">
+                <button class="btn btn-primary" disabled="@(!Model.PuedeOperar || Model.Envio?.Ok != true)">Enviar a Finanzas</button>
+            </form>
+        }
+        else
+        {
+            <button class="btn btn-primary" disabled>Enviada a Finanzas</button>
+        }
+    </div>
+    @if (p.Estado == PlanillaEstado.Observada)
+    {
+        <div class="aviso aviso-warning">Devuelta por Finanzas: @Model.ObservacionesAbiertas observaciones abiertas. <a href="/Ciclos/Correcciones?planilla=@p.Id">Ir a correcciones</a>.</div>
+    }
+    else if (mostrarPlanilla && Model.Envio is { Ok: false } env)
+    {
+        <div class="aviso aviso-warning">@string.Join(" ", env.Motivos) @if (p.Estado == PlanillaEstado.ConAlertasCuenta) { <a href="/Ciclos/ValidacionCuentas?planilla=@p.Id">Ver validación de cuentas</a> }</div>
+    }
+    <div class="tarjeta tabla">
+        <table class="table text-12" style="white-space:nowrap">
+            <thead><tr><th>N°</th><th>A · Tipo gasto</th><th>B · Job</th><th>C · Nombre Job</th><th>D · Glosa</th><th>E · Item</th><th class="num">F · V. unit.</th><th class="num">G · Cant.</th><th class="num">H · Total</th><th>I · Rut</th><th>J · Nombre</th><th>K · N° boleta</th><th>O · Tipo</th><th>P · Cuenta</th><th>Q · Banco</th><th>Estado</th></tr></thead>
+            <tbody>
+            @{ var vistos = new HashSet<int>(); }
+            @foreach (var l in activas.Concat(diferidas))
+            {
+                var primera = l.Estado == LineaEstado.Diferida || vistos.Add(l.PrestadorId);
+                var reg = l.Prestador.Cuentas.FirstOrDefault(c => c.Vigente);
+                var (tc, cta, bco) = mostrarPlanilla || reg is null ? (l.CuentaPlanillaTipo, l.CuentaPlanillaNumero, l.CuentaPlanillaBanco) : (reg.TipoCuenta, reg.Cuenta, reg.Banco);
+                <tr style="@(l.Estado == LineaEstado.Diferida ? "opacity:.6" : null)">
+                    <td class="tabular">@l.Numero</td><td>@l.TipoGasto</td><td class="mono">@l.Job.JobBookNumber</td><td>@l.Job.Nombre</td><td>@l.Glosa.NombreGlosa</td><td class="mono">@l.Glosa.Item</td>
+                    <td class="num">@Formato.Clp(l.ValorUnitarioBruto)</td><td class="num">@Formato.Cantidad(l.Cantidad)</td><td class="num fw-bold">@Formato.Clp(l.ValorTotalBruto)</td>
+                    <td class="mono">@l.Prestador.RutPlanilla</td><td>@l.Prestador.NombreCompleto</td><td class="mono">@(l.NumeroBoleta ?? "—")</td>
+                    <td>@(tc ?? "—")</td><td class="mono">@(cta ?? "—")</td><td>@(bco ?? "—")</td>
+                    <td>@if (primera) { @Badge.De(l.Estado) } else { <span class="muted">misma boleta ↑</span> }</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <p class="m-0 text-12 muted">Columnas L–N (responsable, área, código) se copian del encabezado. O, P y Q se exportan con la cuenta registrada y validada, no con la escrita en la planilla@(mostrarPlanilla ? "; aquí se muestran tal como vinieron" : "").</p>
+}

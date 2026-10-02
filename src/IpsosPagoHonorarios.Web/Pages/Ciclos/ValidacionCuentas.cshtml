@@ -1,0 +1,193 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Ciclos.ValidacionCuentasModel
+@{
+    ViewData["Title"] = "Validación de cuentas";
+    ViewData["Activo"] = "validacion";
+    var p = Model.P;
+
+    static IHtmlContent Resaltar(string? mostrado, string? referencia, bool resaltar)
+    {
+        if (string.IsNullOrEmpty(mostrado)) return new HtmlString("—");
+        var marcas = resaltar ? CuentaReglas.DigitosDistintos(mostrado, referencia) : new bool[mostrado.Length];
+        var sb = new System.Text.StringBuilder();
+        for (var i = 0; i < mostrado.Length; i++)
+        {
+            var ch = System.Net.WebUtility.HtmlEncode(mostrado[i].ToString());
+            sb.Append(marcas[i] ? $"<mark class=\"dif\">{ch}</mark>" : ch);
+        }
+        return new HtmlString(sb.ToString());
+    }
+}
+@using Microsoft.AspNetCore.Html
+<div class="encabezado">
+    <div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <h1>Validación de cuentas</h1>
+        <div class="rol">Rol: Operaciones · Finanzas</div>
+    </div>
+    @if (p is not null) { @Badge.De(p.Estado) }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
+@if (p is null)
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo.</div>
+}
+else
+{
+    var activas = p.Activas().OrderBy(l => l.Numero).ToList();
+    var porPrestador = activas.GroupBy(l => l.PrestadorId).Select(g => g.First()).ToList();
+    var alertas = activas.Where(l => l.AlertaAbierta).ToList();
+    <div class="tarjeta compacta flex-row flex-wrap text-13" style="gap:24px">
+        <div><div class="muted text-12">Fecha de recepción</div><strong>@Formato.Fecha(p.FechaRecepcion)</strong></div>
+        <div><div class="muted text-12">Responsable</div><strong>@p.ResponsableNombre</strong> · @p.ResponsableEmail</div>
+        <div><div class="muted text-12">Área</div><strong>@p.Area.Nombre</strong> <span class="mono">@p.Area.CodigoArea</span></div>
+        <div><div class="muted text-12">Monto total</div><strong class="tabular">@Formato.Clp(activas.Sum(l => l.ValorTotalBruto))</strong> · @activas.Count filas · @porPrestador.Count prestadores</div>
+    </div>
+    <div class="fila" aria-label="Contadores por resultado (prestadores)">
+        @foreach (var r in Enum.GetValues<ResultadoCuenta>())
+        {
+            @Badge.Html(Badge.TonoDe(r), $"{r.Nombre()} · {porPrestador.Count(l => l.ResultadoCuenta == r)}", "tag-lg")
+        }
+    </div>
+    <div class="tarjeta tabla">
+        <table class="table">
+            <thead><tr><th>Fila</th><th>Prestador</th><th>Cuenta en la planilla</th><th>Cuenta registrada</th><th>Resultado</th><th>Acción</th></tr></thead>
+            <tbody>
+            @foreach (var l in activas)
+            {
+                var reg = l.Prestador.Cuentas.FirstOrDefault(c => c.Vigente);
+                var resaltar = l.ResultadoCuenta == ResultadoCuenta.PosibleErrorTipeo;
+                var refNum = l.CuentaPlanillaTipo == CuentaReglas.TipoRut ? l.Prestador.Rut.ToString() : reg?.Cuenta;
+                <tr>
+                    <td class="tabular">@l.Numero</td>
+                    <td><div>@l.Prestador.NombreCompleto</div><div class="sub">@l.Prestador.RutUi</div></td>
+                    <td><div class="text-12 muted nowrap">@(l.CuentaPlanillaTipo ?? "—") · @(l.CuentaPlanillaBanco ?? "—")</div><div class="cuenta">@Resaltar(l.CuentaPlanillaNumero, refNum, resaltar)</div></td>
+                    <td>
+                        @if (reg is null)
+                        {
+                            <div class="text-12 muted">Sin cuenta registrada</div><div class="cuenta">—</div>
+                        }
+                        else
+                        {
+                            <div class="text-12 muted nowrap">@reg.TipoCuenta · @reg.Banco</div>
+                            <div class="d-flex gap-2 align-items-center"><span class="cuenta">@reg.Cuenta</span>@Badge.De(reg.Estado)</div>
+                        }
+                    </td>
+                    <td>@Badge.De(l.ResultadoCuenta)
+                        @if (l.AlertaCuentaResuelta) { @Badge.Html(Tono.Success, "Resuelta") }
+                        <div class="text-12 mt-1" style="max-width:240px">@l.ResultadoCuentaDetalle</div></td>
+                    <td>
+                        @if (l.AlertaAbierta)
+                        {
+                            <div class="fila">
+                                @if (Model.PuedeOperar)
+                                {
+                                    <a class="btn btn-secondary btn-xs" href="#solicitud">Pedir corrección</a>
+                                }
+                                @if (Model.PuedeRegistrar && l.ResultadoCuenta != ResultadoCuenta.CuentaTercero)
+                                {
+                                    <button type="button" class="btn btn-secondary btn-xs" data-bs-toggle="collapse" data-bs-target="#reg-@l.Id" aria-expanded="false">
+                                        @(reg is null ? "Registrar cuenta" : "Registrar cambio")</button>
+                                }
+                                @if (Model.PuedeOperar)
+                                {
+                                    <form method="post" asp-page-handler="Diferir" asp-route-planilla="@p.Id" class="m-0">
+                                        <input type="hidden" name="lineaId" value="@l.Id" />
+                                        <button class="btn btn-secondary btn-xs" title="Difiere todas las filas del prestador al ciclo siguiente">Diferir</button>
+                                    </form>
+                                }
+                            </div>
+                        }
+                        else { <span class="muted">—</span> }
+                    </td>
+                </tr>
+                @if (l.AlertaAbierta && Model.PuedeRegistrar && l.ResultadoCuenta != ResultadoCuenta.CuentaTercero)
+                {
+                    <tr class="collapse" id="reg-@l.Id">
+                        <td colspan="6">
+                            <form method="post" asp-page-handler="Registrar" asp-route-planilla="@p.Id" class="d-flex flex-wrap gap-2 align-items-end">
+                                <input type="hidden" name="prestadorId" value="@l.PrestadorId" />
+                                <div><label class="form-label" for="b-@l.Id">Banco</label>
+                                    <select id="b-@l.Id" name="banco" class="form-select form-select-sm">
+                                        @foreach (var b in Model.Bancos) { <option selected="@(b == l.CuentaPlanillaBanco)">@b</option> }
+                                    </select></div>
+                                <div><label class="form-label" for="t-@l.Id">Tipo</label>
+                                    <select id="t-@l.Id" name="tipo" class="form-select form-select-sm">
+                                        @foreach (var t in Model.Tipos) { <option selected="@(t == l.CuentaPlanillaTipo)">@t</option> }
+                                    </select></div>
+                                <div><label class="form-label" for="c-@l.Id">Cuenta (6 a 20 dígitos)</label>
+                                    <input id="c-@l.Id" name="cuenta" class="form-control form-control-sm mono" value="@l.CuentaPlanillaNumero" inputmode="numeric" required /></div>
+                                <div><label class="form-label" for="c2-@l.Id">Repite la cuenta</label>
+                                    <input id="c2-@l.Id" name="cuentaRepetida" class="form-control form-control-sm mono" inputmode="numeric" autocomplete="off" required /></div>
+                                <button class="btn btn-primary btn-sm">Registrar (queda pendiente)</button>
+                                <span class="text-12 muted w-100">Titular = RUT del prestador. Tipo RUT: banco ESTADO y cuenta = RUT sin DV. Solo Finanzas valida.</span>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    </div>
+    <div class="grid-3-2">
+        <form method="post" asp-page-handler="Solicitar" asp-route-planilla="@p.Id" class="tarjeta" id="solicitud">
+            <h2>Solicitar corrección al responsable</h2>
+            <fieldset disabled="@(!Model.PuedeOperar || alertas.Count == 0)" class="d-flex flex-column gap-3">
+                <div><label class="form-label" for="sc-to">Para</label>
+                    <input id="sc-to" name="para" class="form-control" value="@p.ResponsableNombre <@p.ResponsableEmail>" required /></div>
+                <div><span class="form-label d-block">Filas</span>
+                    <div class="fila">
+                        @foreach (var l in alertas)
+                        {
+                            <label class="tag @(l.ResultadoCuenta == ResultadoCuenta.CuentaTercero ? "tag-danger" : "tag-warning")">
+                                <input type="checkbox" name="lineas" value="@l.Id" checked /> Fila @l.Numero · @l.ResultadoCuenta.Nombre().ToLowerInvariant()</label>
+                        }
+                        @if (alertas.Count == 0) { <span class="text-13 muted">Sin alertas abiertas.</span> }
+                    </div></div>
+                <div><label class="form-label" for="sc-msg">Mensaje</label>
+                    <textarea id="sc-msg" name="mensaje" class="form-control" rows="3" required>Hola @p.ResponsableNombre.Split(' ')[0]: las filas @string.Join(", ", alertas.Select(a => a.Numero)) de la planilla @p.Area.Nombre v@(p.Version) tienen cuentas que no coinciden con las registradas. Por favor revisa el número de cuenta y sube la versión corregida.</textarea></div>
+                <div class="fila"><button type="submit" class="btn btn-primary">Enviar solicitud</button><span class="text-12 muted">Queda registrada y se puede reenviar.</span></div>
+            </fieldset>
+            @if (Model.Solicitudes.Count > 0)
+            {
+                <div class="text-13 d-flex flex-column gap-1">
+                    <strong>Solicitudes enviadas</strong>
+                    @foreach (var s in Model.Solicitudes)
+                    {
+                        <div class="d-flex gap-2 align-items-center flex-wrap">
+                            <span class="tabular muted">@Formato.FechaHora(s.EnviadaEn)</span><span>v@(s.Version) · @s.EnviadaA · @s.Envios envío(s)</span>
+                            @Badge.Html(Tono.Info, s.Estado.ToString())
+                            @if (Model.PuedeOperar)
+                            {
+                                <button class="btn btn-ghost btn-xs" formaction="?handler=ReenviarSolicitud&planilla=@p.Id&solicitudId=@s.Id" formnovalidate>Reenviar</button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </form>
+        <form method="post" asp-page-handler="Corregida" asp-route-planilla="@p.Id" enctype="multipart/form-data" class="tarjeta">
+            <h2>Subir planilla corregida</h2>
+            <fieldset disabled="@(!Model.PuedeOperar || p.Estado is not (PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta))" class="d-flex flex-column gap-3">
+                <label class="zona-carga"><strong>Arrastra la versión v@(p.Version + 1) (XLSX)</strong><span class="text-12">Se valida completa nuevamente</span>
+                    <input type="file" name="archivo" accept=".xlsx,.csv" required /></label>
+                <div class="seg" role="radiogroup" aria-label="Formato">
+                    <label><input type="radio" name="tipoArchivo" value="Finanzas" checked />Formato Finanzas</label>
+                    <label><input type="radio" name="tipoArchivo" value="Exportacion" />Exportación</label>
+                </div>
+                <button class="btn btn-secondary align-self-start">Subir versión corregida</button>
+            </fieldset>
+        </form>
+    </div>
+    <form method="post" asp-page-handler="Enviar" asp-route-planilla="@p.Id" class="d-flex align-items-center justify-content-end gap-3 flex-wrap">
+        @if (Model.Envio is { Ok: false } env && p.Estado is PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta)
+        {
+            <span class="text-13" style="color:var(--warning)">@string.Join(" ", env.Motivos)</span>
+        }
+        else if (p.Estado is not (PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta))
+        {
+            <span class="text-13 muted">La planilla ya fue enviada (@p.Estado.Nombre()).</span>
+        }
+        <button type="submit" class="btn btn-primary" disabled="@(!Model.PuedeOperar || Model.Envio?.Ok != true)">Enviar a Finanzas</button>
+    </form>
+}

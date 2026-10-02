@@ -1,0 +1,10 @@
+@model (List<IpsosPagoHonorarios.Core.Planilla> Planillas, int? Seleccionada, string Parametro)
+@if (Model.Planillas.Count > 0)
+{
+    <div role="tablist" class="seg" aria-label="Planillas por área">
+        @foreach (var p in Model.Planillas)
+        {
+            <a role="tab" href="?@Model.Parametro=@p.Id" aria-selected="@(p.Id == Model.Seleccionada ? "true" : "false")">@p.Area.Nombre</a>
+        }
+    </div>
+}

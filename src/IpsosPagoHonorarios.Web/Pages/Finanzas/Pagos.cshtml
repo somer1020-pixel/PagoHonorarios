@@ -1,0 +1,107 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Finanzas.PagosModel
+@{
+    ViewData["Title"] = "Pagos y cierre";
+    ViewData["Activo"] = "pagos";
+    var p = Model.P;
+    var r = Model.Resumen;
+    var porTransferir = r.Where(x => x.Transferencia is null).ToList();
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Finanzas / @(Model.Ciclo?.Codigo ?? "—") / @(p?.Area.Nombre ?? "—")</div>
+        <h1>Pagos y cierre</h1>
+        <div class="rol">Rol: Finanzas</div>
+    </div>
+    @if (p is not null) { @Badge.De(p.Estado) }
+</div>
+<partial name="_TabsPlanillas" model='(Model.Planillas, Model.Planilla, "planilla")' />
+@if (p is not null)
+{
+    var aprobada = p.Estado is PlanillaEstado.Aprobada or PlanillaEstado.EnPago;
+    <div class="kpis">
+        <div class="kpi"><span class="etq">Bruto aprobado</span><span class="val">@Formato.Clp(r.Sum(x => x.Bruto))</span></div>
+        <div class="kpi"><span class="etq">Retención @Formato.Porcentaje(Model.Tasa)</span><span class="val">@Formato.Clp(r.Sum(x => x.Retencion))</span></div>
+        <div class="kpi"><span class="etq">Líquido por transferir</span><span class="val">@Formato.Clp(porTransferir.Sum(x => x.Liquido))</span></div>
+        <div class="kpi"><span class="etq">Diferidos</span><span class="val">@Formato.Clp(p.Lineas.Where(l => l.Estado == LineaEstado.Diferida).Sum(l => l.ValorTotalBruto))</span></div>
+    </div>
+    @if (!aprobada && p.Estado != PlanillaEstado.Cerrada)
+    {
+        <div class="aviso aviso-neutral">La planilla aún no está aprobada por Finanzas (@p.Estado.Nombre()). <a href="/Finanzas/Revision?planilla=@p.Id">Ir a revisión</a>.</div>
+    }
+    <div class="tarjeta tabla">
+        <div class="d-flex align-items-center gap-2 p-2 flex-wrap"><h2 class="flex-fill">Transferencias · una por boleta</h2>
+            <form method="post" asp-page-handler="Nomina" asp-route-planilla="@p.Id" class="m-0">
+                <button class="btn btn-secondary btn-sm" disabled="@(!aprobada || porTransferir.Count == 0)"><i class="bi bi-download" aria-hidden="true"></i> Descargar nómina XLSX</button></form>
+        </div>
+        <table class="table">
+            <thead><tr><th>Prestador</th><th>Boleta</th><th>Cuenta registrada</th><th class="num">Bruto</th><th class="num">Retención</th><th class="num">Líquido</th><th>N° operación</th><th>Estado</th></tr></thead>
+            <tbody>
+            @foreach (var x in r)
+            {
+                <tr>
+                    <td><div>@x.Prestador.NombreCompleto</div><div class="sub">@x.Prestador.RutUi</div></td>
+                    <td class="mono text-12">@(x.Boleta?.NumeroBoleta ?? "—")</td>
+                    <td>
+                        @if (x.Cuenta is null) { <span class="muted">Sin cuenta</span> }
+                        else
+                        {
+                            <div class="mono text-12 nowrap">@x.Cuenta.Cuenta</div>
+                            <div class="text-12 nowrap" style="color:@(x.Cuenta.Estado == CuentaEstado.Validada ? "var(--teal-text)" : "var(--warning)")">@x.Cuenta.TipoCuenta · @x.Cuenta.Banco · @x.Cuenta.Estado.Nombre()</div>
+                        }
+                    </td>
+                    <td class="num">@Formato.Clp(x.Bruto)</td><td class="num">@Formato.Clp(x.Retencion)</td><td class="num fw-bold">@Formato.Clp(x.Liquido)</td>
+                    <td class="mono text-12">@if (x.Transferencia is { } t) { <a href="?handler=Comprobante&transferenciaId=@t.Id">@t.NumeroOperacion</a> } else { <span>—</span> }</td>
+                    <td>@(x.Transferencia is null ? Badge.Html(Tono.Neutral, "Por transferir") : Badge.Html(Tono.Success, "Pagada"))</td>
+                </tr>
+            }
+            @if (r.Count == 0) { <tr><td colspan="8" class="muted">Sin líneas aprobadas.</td></tr> }
+            </tbody>
+        </table>
+    </div>
+    <div class="grid-3-2">
+        <form method="post" asp-page-handler="Registrar" asp-route-planilla="@p.Id" enctype="multipart/form-data" class="tarjeta">
+            <h2>Registrar pago</h2>
+            <fieldset disabled="@(!aprobada || porTransferir.Count == 0)" class="d-flex flex-column gap-3">
+                <div class="campos-3">
+                    <div><label class="form-label" for="rp-f">Fecha</label><input id="rp-f" name="fecha" type="date" class="form-control" value="@Model.Hoy.ToString("yyyy-MM-dd")" required /></div>
+                    <div><label class="form-label" for="rp-o">N° de operación</label><input id="rp-o" name="numeroOperacion" class="form-control mono" required placeholder="OP-0000000" /></div>
+                    <div><label class="form-label" for="rp-p">Prestador</label>
+                        <select id="rp-p" name="prestadorId" class="form-select">
+                            @foreach (var x in porTransferir) { <option value="@x.Prestador.Id">@x.Prestador.NombreCompleto · @Formato.Clp(x.Liquido)</option> }
+                        </select></div>
+                </div>
+                <label class="zona-carga compacta">Comprobante PDF<input type="file" name="comprobante" accept="application/pdf" required /></label>
+                <button class="btn btn-primary align-self-start">Registrar pago</button>
+            </fieldset>
+            <p class="m-0 text-12 muted">Siempre a la cuenta registrada y validada. Las líneas pasan a Pagada y se avisa al prestador por correo.</p>
+        </form>
+        <div class="tarjeta">
+            <h2>Diferidos · @Model.Ciclo!.Codigo</h2>
+            @foreach (var l in Model.Diferidas)
+            {
+                <div class="d-flex justify-content-between gap-2 text-13"><span>@l.Prestador.NombreCompleto · @l.Planilla.Area.Nombre línea @l.Numero</span><span class="tabular">@Formato.Clp(l.ValorTotalBruto)</span></div>
+            }
+            @if (Model.Diferidas.Count > 0)
+            {
+                <div class="d-flex gap-2 align-items-center text-12">@Badge.Html(Tono.Neutral, "Diferido") al ciclo @Formato.CodigoCiclo(Model.Ciclo.Periodo.AddMonths(1))</div>
+            }
+            else { <span class="text-13 muted">Sin líneas diferidas.</span> }
+            @if (Model.Ciclo.Estado == CicloEstado.Cerrado)
+            {
+                <div class="aviso aviso-success">Ciclo cerrado el @Formato.FechaHora(Model.Ciclo.CerradoEn) por @Model.Ciclo.CerradoPor.</div>
+                <a class="btn btn-secondary align-self-start" href="/Ciclos/Historial?handler=Zip&cicloId=@Model.Ciclo.Id">Descargar ZIP de respaldos</a>
+            }
+            else
+            {
+                <form method="post" asp-page-handler="Cerrar" asp-route-planilla="@p.Id" class="m-0">
+                    <button class="btn btn-primary" disabled="@(Model.Cierre?.Ok != true)">Cerrar ciclo y archivar</button></form>
+                <span class="text-12 muted">@(Model.Cierre is { Ok: false } c ? string.Join(" ", c.Motivos) + " " : "")El cierre genera el ZIP de respaldos y deja el ciclo en solo lectura.</span>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="aviso aviso-info">No hay planillas en este ciclo.</div>
+}

@@ -1,0 +1,26 @@
+@{
+    var nombre = (User.FindFirst("nombre")?.Value ?? "").Split(' ')[0];
+}
+<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Portal de boletas</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="portal-top">
+    <span class="monograma" aria-hidden="true">Ip</span>
+    <span class="flex-fill" style="font-size:16px;font-weight:500">Mis boletas</span>
+    <span class="text-12">@nombre</span>
+    <form method="post" action="/Cuenta/Logout" asp-antiforgery="true" class="m-0"><button type="submit" class="btn btn-sm btn-44" style="color:#fff;border:1px solid var(--ink-muted)">Salir</button></form>
+</header>
+<main class="portal-main">
+    @RenderBody()
+</main>
+<script src="~/js/site.js" asp-append-version="true"></script>
+</body>
+</html>

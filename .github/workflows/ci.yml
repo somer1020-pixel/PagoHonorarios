@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restaurar
+        run: dotnet restore IpsosPagoHonorarios.sln
+      - name: Compilar
+        run: dotnet build IpsosPagoHonorarios.sln --no-restore -c Release
+      - name: Probar (xUnit, SQLite en memoria)
+        run: dotnet test IpsosPagoHonorarios.sln --no-build -c Release --logger "trx;LogFileName=resultados.trx"
+      - name: Resultados de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas
+          path: '**/TestResults/*.trx'
+
+  # Publicar en main solo si todo pasa.
+  publicar:
+    needs: build-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publicar para IIS
+        run: dotnet publish src/IpsosPagoHonorarios.Web/IpsosPagoHonorarios.Web.csproj -c Release -o publish
+      - name: Script de migraciones (idempotente) para SQL Server
+        run: |
+          dotnet tool restore
+          dotnet ef migrations script --idempotent -p src/IpsosPagoHonorarios.Web -o publish/migraciones.sql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IpsosPagoHonorarios-web
+          path: publish

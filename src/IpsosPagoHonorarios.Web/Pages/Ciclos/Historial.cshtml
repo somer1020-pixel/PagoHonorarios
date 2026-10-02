@@ -1,0 +1,34 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Ciclos.HistorialModel
+@{
+    ViewData["Title"] = "Historial";
+    ViewData["Activo"] = "historial";
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Consulta / Historial</div>
+        <h1>Historial de ciclos</h1>
+        <div class="rol">Rol: interno</div>
+    </div>
+</div>
+<div class="tarjeta tabla">
+    <table class="table">
+        <thead><tr><th>Ciclo</th><th>Estado</th><th class="num">Planillas</th><th class="num">Prestadores</th><th class="num">Monto bruto</th><th>Pago</th><th>Respaldos</th></tr></thead>
+        <tbody>
+        @foreach (var f in Model.Filas)
+        {
+            <tr>
+                <td class="mono text-12"><a href="/Ciclos/Seleccionar?codigo=@f.Ciclo.Codigo&volver=/">@f.Ciclo.Codigo</a></td>
+                <td>@Badge.De(f.Ciclo.Estado)</td>
+                <td class="num">@f.Planillas</td>
+                <td class="num">@f.Prestadores</td>
+                <td class="num">@Formato.Clp(f.Monto)</td>
+                <td class="tabular">@(f.Ciclo.Estado == CicloEstado.Cerrado || f.UltimoPago is not null ? Formato.Fecha(f.UltimoPago) : "Programado " + Formato.Fecha(f.Ciclo.FechaPagoProgramada))</td>
+                <td>@if (f.Ciclo.RutaZip is not null) { <a class="btn btn-ghost btn-sm" href="?handler=Zip&cicloId=@f.Ciclo.Id"><i class="bi bi-file-earmark-zip" aria-hidden="true"></i> Descargar ZIP</a> }
+                    else { <span class="muted">Al cerrar</span> }</td>
+            </tr>
+        }
+        @if (Model.Filas.Count == 0) { <tr><td colspan="7" class="muted">Sin ciclos.</td></tr> }
+        </tbody>
+    </table>
+</div>

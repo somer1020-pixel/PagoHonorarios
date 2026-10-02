@@ -1,0 +1,10 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.ErrorModel
+@{
+    ViewData["Title"] = "Error";
+}
+<div class="encabezado">
+    <div><h1>@Model.Titulo</h1><div class="rol">@Model.Detalle</div></div>
+    @Badge.Html(Model.Codigo == 404 ? Tono.Neutral : Tono.Danger, Model.Codigo.ToString())
+</div>
+<a class="btn btn-secondary align-self-start" href="/">Volver al inicio</a>
