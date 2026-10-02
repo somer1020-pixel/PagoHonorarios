@@ -187,6 +187,7 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
                 Glosa = Texto(ws.Cell(r, 4)),
                 ValorUnitario = Numero(ws.Cell(r, 6)),
                 Cantidad = Numero(ws.Cell(r, 7)),
+                TotalArchivo = NumeroSeguro(ws.Cell(r, 8)),
                 Rut = rut,
                 Nombre = Texto(ws.Cell(r, 10)),
                 NumeroBoleta = Texto(ws.Cell(r, 11)),
@@ -295,6 +296,12 @@ public class ExcelPlanilla(AppDbContext db, IOptions<OpcionesPlantillas> opcione
         if (v.IsError) return null;
         var s = c.GetString().Trim();
         return s.Length == 0 ? null : s;
+    }
+
+    /// <summary>Valor numérico (evalúa fórmulas); null si no se puede calcular.</summary>
+    private static decimal? NumeroSeguro(IXLCell c)
+    {
+        try { return Numero(c); } catch { return null; }
     }
 
     private static decimal? Numero(IXLCell c)

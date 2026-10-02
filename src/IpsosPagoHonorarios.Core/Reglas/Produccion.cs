@@ -10,6 +10,8 @@ public sealed record FilaProduccion
     public string? Glosa { get; init; }
     public decimal? ValorUnitario { get; init; }
     public decimal? Cantidad { get; init; }
+    /// <summary>Valor total bruto escrito en el archivo (columna H), si viene.</summary>
+    public decimal? TotalArchivo { get; init; }
     public string? Rut { get; init; }
     public string? Nombre { get; init; }
     public string? NumeroBoleta { get; init; }
@@ -32,6 +34,24 @@ public static class ProduccionReglas
         hoy.Day >= desde && hoy.Day <= hasta
             ? null
             : $"Hoy {Formato.Fecha(hoy)} está fuera de la ventana de descarga (días {desde} a {hasta}). Se puede cargar, con aviso.";
+
+    /// <summary>
+    /// R-03: el total siempre es ROUND(F×G). Si el archivo trae otro valor en H (p. ej. escrito a mano en vez de la fórmula),
+    /// se avisa por fila y se usa el valor calculado.
+    /// </summary>
+    public static List<string> AvisosTotales(IEnumerable<FilaProduccion> filas)
+    {
+        var avisos = new List<string>();
+        foreach (var f in filas)
+        {
+            if (f.TotalArchivo is not { } h || f.ValorUnitario is not { } vu || f.Cantidad is not { } q) continue;
+            var calculado = Montos.ValorTotal(vu, q);
+            if (Montos.RedondearExcel(h) != calculado)
+                avisos.Add($"Fila {f.Fila}: el valor total del archivo (H = {Formato.Clp(h)}) no corresponde a ROUND(F×G) = " +
+                           $"{Formato.Cantidad(q)} × {Formato.Clp(vu)} = {Formato.Clp(calculado)}; se usa {Formato.Clp(calculado)} (diferencia {Formato.Clp(h - calculado)}).");
+        }
+        return avisos;
+    }
 
     public static bool JobValido(string? job) => job is { Length: 12 } && job.All(char.IsAsciiDigit);
 

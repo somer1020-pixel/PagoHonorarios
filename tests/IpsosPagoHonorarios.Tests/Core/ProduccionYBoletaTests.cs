@@ -35,6 +35,16 @@ public class ProduccionYBoletaTests
     }
 
     [Fact]
+    public void R03_TotalEscritoAManoDistintoDeFxG_SeAvisa()
+    {
+        var avisos = ProduccionReglas.AvisosTotales([F(16, vu: 250, q: 45) with { TotalArchivo = 13127 }, F(17, vu: 250, q: 99.845m) with { TotalArchivo = 24961 }]);
+        var a = Assert.Single(avisos);
+        Assert.Contains("Fila 16", a);
+        Assert.Contains("$11.250", a);
+        Assert.Contains("diferencia $1.877", a);
+    }
+
+    [Fact]
     public void R02_VentanaDeDescarga()
     {
         Assert.Null(ProduccionReglas.AvisoVentana(new DateOnly(2026, 10, 28)));

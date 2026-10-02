@@ -67,6 +67,13 @@ public class ProduccionService(
         var par = await parametros.ObtenerAsync();
         if (ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta) is { } aviso) avisos.Add(aviso);
         avisos.AddRange(validacion.Avisos);
+        avisos.AddRange(ProduccionReglas.AvisosTotales(filas));
+        if (leido.Encabezado?.MontoTotal is { } b3 && filas.All(f => f.ValorUnitario is not null && f.Cantidad is not null))
+        {
+            var suma = filas.Sum(f => Montos.ValorTotal(f.ValorUnitario!.Value, f.Cantidad!.Value));
+            if (Montos.RedondearExcel(b3) != suma)
+                avisos.Add($"El monto total del archivo (B3 = {Formato.Clp(b3)}) difiere de la suma recalculada {Formato.Clp(suma)}; se usa {Formato.Clp(suma)}.");
+        }
         if (leido.Encabezado?.Area is { Length: > 0 } areaArchivo && !areaArchivo.Equals(area!.Nombre, StringComparison.OrdinalIgnoreCase))
             avisos.Add($"El archivo indica el área «{areaArchivo}» (B4), pero se cargó en {area.Nombre}.");
 
