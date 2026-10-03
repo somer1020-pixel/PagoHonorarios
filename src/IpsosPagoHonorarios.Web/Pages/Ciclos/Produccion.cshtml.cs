@@ -26,6 +26,25 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     [BindProperty(SupportsGet = true)] public int? Planilla { get; set; }
 
     public bool PuedeCargar => Puede(Roles.Operaciones);
+    public bool CicloCerrado => Ciclo?.Estado == CicloEstado.Cerrado;
+    /// <summary>Con el ciclo seleccionado cerrado: otro ciclo abierto al que cambiar o, si no hay, el código del siguiente a abrir.</summary>
+    public Ciclo? CicloAbierto { get; set; }
+    public string? SiguienteCodigo { get; set; }
+
+    /// <summary>Por qué la planilla de un área no admite una nueva carga (null = la admite).</summary>
+    public static string? MotivoSinCarga(Planilla p) => p.Estado switch
+    {
+        PlanillaEstado.EnRevision => "Enviada a Finanzas y en revisión: no admite una nueva carga.",
+        PlanillaEstado.Observada => "Finanzas la observó: las correcciones se hacen en Correcciones, no con una nueva carga.",
+        PlanillaEstado.Aprobada => "Aprobada por Finanzas: solo lectura.",
+        PlanillaEstado.EnPago => "En pago: solo lectura.",
+        PlanillaEstado.Cerrada => "Cerrada: solo lectura.",
+        _ => null
+    };
+
+    public static string Situacion(Planilla p) => MotivoSinCarga(p) ?? (p.Estado == PlanillaEstado.ConAlertasCuenta
+        ? "Con alertas de cuenta (revísalas en Validación de cuentas). Admite una nueva carga, que reemplaza la versión actual."
+        : "Admite una nueva carga, que reemplaza la versión actual.");
 
     private async Task CargarAsync()
     {
@@ -38,6 +57,12 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
         AvisoVentana = ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta);
         if (Ciclo is null) return;
         Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        if (CicloCerrado)
+        {
+            CicloAbierto = await db.Ciclos.Where(c => c.Estado == CicloEstado.Abierto).OrderByDescending(c => c.Periodo).FirstOrDefaultAsync();
+            if (CicloAbierto is null)
+                SiguienteCodigo = Formato.CodigoCiclo((await db.Ciclos.MaxAsync(c => c.Periodo)).AddMonths(1));
+        }
         var id = Planilla ?? Planillas.OrderByDescending(p => p.ModificadoEn ?? p.CreadoEn).FirstOrDefault()?.Id;
         if (id is not null) Resumen = await ciclos.PlanillaCompletaAsync(id.Value);
         if (Resumen?.CicloId != Ciclo.Id) Resumen = null;
@@ -51,6 +76,22 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
             Responsable = n;
             ResponsableEmail = User.Identity?.Name ?? "";
         }
+    }
+
+    /// <summary>Con todos los ciclos cerrados: abre el ciclo siguiente para poder cargar producción.</summary>
+    public async Task<IActionResult> OnPostAbrirCicloAsync()
+    {
+        if (!PuedeCargar) return Forbid();
+        if (await db.Ciclos.AnyAsync(c => c.Estado == CicloEstado.Abierto))
+        {
+            MensajeError = "Ya hay un ciclo abierto: selecciónalo en la barra superior.";
+            return RedirectToPage();
+        }
+        var ultimo = await db.Ciclos.MaxAsync(c => (DateOnly?)c.Periodo) ?? ciclos.Hoy.AddMonths(-1);
+        var c = await ciclos.ObtenerOCrearAsync(ultimo.AddMonths(1));
+        await db.SaveChangesAsync();
+        MensajeOk = $"Ciclo {c.Codigo} abierto: ya puedes cargar la producción.";
+        return LocalRedirect($"/Ciclos/Seleccionar?codigo={c.Codigo}&volver=%2FCiclos%2FProduccion");
     }
 
     public async Task<IActionResult> OnPostAsync()

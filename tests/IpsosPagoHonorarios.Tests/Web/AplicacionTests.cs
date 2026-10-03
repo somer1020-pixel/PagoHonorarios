@@ -367,4 +367,22 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.False(r.Cargada);
         Assert.Contains(r.Errores, e => e.Campo == "Área" && e.Motivo.Contains("No tienes asignada"));
     }
+
+    [Fact]
+    public async Task Produccion_MuestraElMotivoPorElQueNoAdmiteCarga()
+    {
+        var c = Cliente();
+        await IngresarAsync(c, "andres.paredes@ejemplo.cl");
+        var cerrado = System.Net.WebUtility.HtmlDecode(await c.GetStringAsync("/Ciclos/Produccion?ciclo=SEP-2026"));
+        Assert.Contains("No se puede cargar producción en SEP-2026", cerrado);
+        Assert.Contains("el ciclo se cerró el", cerrado);
+        Assert.Contains("Ir a OCT-2026", cerrado);
+        Assert.Contains("No: el ciclo está cerrado.", cerrado);
+        Assert.Matches("<fieldset disabled=\"disabled\"", cerrado);
+
+        var abierto = System.Net.WebUtility.HtmlDecode(await c.GetStringAsync("/Ciclos/Produccion?ciclo=OCT-2026"));
+        Assert.DoesNotContain("No se puede cargar producción", abierto);
+        Assert.Contains("Finanzas la observó: las correcciones se hacen en Correcciones", abierto);   // FACE TO FACE v2 observada
+        Assert.Contains("data-motivo=\"FACE TO FACE v2: Finanzas la observó", abierto);
+    }
 }

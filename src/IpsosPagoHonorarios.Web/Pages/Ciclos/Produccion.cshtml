@@ -11,8 +11,28 @@
         <h1>Cargar producción</h1>
         <div class="rol">Rol: Operaciones (Finanzas: lectura)</div>
     </div>
-    @if (Model.Resumen is not null) { @Badge.De(Model.Resumen.Estado) } else { @Badge.Html(Tono.Neutral, "Borrador") }
+    @if (Model.CicloCerrado) { @Badge.Html(Tono.Neutral, $"Ciclo {Model.Ciclo!.Codigo} cerrado") }
+    else if (Model.Resumen is not null) { <span class="text-13 muted">@Model.Resumen.Area.Nombre v@(Model.Resumen.Version)</span> @Badge.De(Model.Resumen.Estado) }
+    else { @Badge.Html(Tono.Neutral, "Borrador") }
 </div>
+@if (Model.CicloCerrado)
+{
+    var c = Model.Ciclo!;
+    <div class="aviso aviso-danger d-flex flex-wrap align-items-center gap-3">
+        <span class="flex-fill"><strong>No se puede cargar producción en @c.Codigo:</strong> el ciclo se cerró@(c.CerradoEn is null ? "" : $" el {Formato.FechaHora(c.CerradoEn)}")@(c.CerradoPor is null ? "" : $" por {c.CerradoPor}") y quedó en solo lectura.
+            @if (Model.CicloAbierto is { } ab) { <text>Cambia al ciclo abierto <strong>@ab.Codigo</strong> para cargar.</text> }
+            else if (Model.SiguienteCodigo is not null) { <text>No hay ciclos abiertos: abre <strong>@Model.SiguienteCodigo</strong> para cargar la producción.</text> }
+        </span>
+        @if (Model.CicloAbierto is { } a2)
+        {
+            <a class="btn btn-primary btn-sm" href="/Ciclos/Seleccionar?codigo=@a2.Codigo&volver=%2FCiclos%2FProduccion">Ir a @a2.Codigo</a>
+        }
+        else if (Model.SiguienteCodigo is not null && Model.PuedeCargar)
+        {
+            <form method="post" asp-page-handler="AbrirCiclo" class="m-0"><button class="btn btn-primary btn-sm">Abrir ciclo @Model.SiguienteCodigo</button></form>
+        }
+    </div>
+}
 @if (Model.AvisoVentana is not null)
 {
     <div class="aviso aviso-warning">@Model.AvisoVentana</div>
@@ -24,7 +44,7 @@ else
 <div class="grid-5-6">
     <form method="post" enctype="multipart/form-data" class="tarjeta">
         <h2>Archivo</h2>
-        <fieldset disabled="@(!Model.PuedeCargar)" class="d-flex flex-column gap-3">
+        <fieldset disabled="@(!Model.PuedeCargar || Model.CicloCerrado)" class="d-flex flex-column gap-3">
             <div class="seg" role="radiogroup" aria-label="Tipo de archivo">
                 <label><input type="radio" name="TipoArchivo" value="Exportacion" checked="@(Model.TipoArchivo == TipoArchivoProduccion.Exportacion)" />Exportación del sistema (XLSX/CSV)</label>
                 <label><input type="radio" name="TipoArchivo" value="Finanzas" checked="@(Model.TipoArchivo == TipoArchivoProduccion.Finanzas)" />Planilla formato Finanzas</label>
@@ -41,9 +61,11 @@ else
                     <select id="p-area" name="AreaId" class="form-select" required>
                         @foreach (var a in Model.Areas)
                         {
-                            <option value="@a.Id" selected="@(a.Id == Model.AreaId)">@a.Nombre</option>
+                            var pa = Model.Planillas.FirstOrDefault(x => x.AreaId == a.Id);
+                            <option value="@a.Id" selected="@(a.Id == Model.AreaId)" data-motivo="@(pa is null ? null : ProduccionModel.MotivoSinCarga(pa) is { } m ? $"{a.Nombre} v{pa.Version}: {m}" : null)">@a.Nombre</option>
                         }
                     </select>
+                    <div id="p-area-motivo" class="aviso aviso-warning text-12 mt-2" hidden></div>
                 </div>
                 <div>
                     <label class="form-label" for="p-tg">Tipo de gasto</label>
@@ -66,13 +88,14 @@ else
             <button type="submit" class="btn btn-primary align-self-start">Importar y generar planilla</button>
         </fieldset>
         @if (!Model.PuedeCargar) { <p class="m-0 text-12 muted">Solo lectura para tu rol.</p> }
+        else if (Model.CicloCerrado) { <p class="m-0 text-12 muted">Carga deshabilitada: el ciclo @Model.Ciclo!.Codigo está cerrado.</p> }
     </form>
     <div class="pila">
         <div class="tarjeta">
             <div class="d-flex align-items-center gap-2"><h2 class="flex-fill">Resultado de la importación</h2>
                 @if (r is not null)
                 {
-                    @(r.Cargada ? Badge.Html(Tono.Success, "Cargada") : Badge.Html(Tono.Danger, $"Rechazada · {r.Errores.Count} errores"))
+                    @(r.Cargada ? Badge.Html(Tono.Success, "Cargada") : Badge.Html(Tono.Danger, $"Rechazada · {r.Errores.Count} {(r.Errores.Count == 1 ? "error" : "errores")}"))
                 }
             </div>
             @if (r is null)
@@ -81,7 +104,8 @@ else
             }
             else if (!r.Cargada)
             {
-                <p class="m-0 text-13">El archivo no se cargó. Corrige las filas y vuelve a subirlo.</p>
+                var generales = r.Errores.All(e => e.Fila == 0);
+                <p class="m-0 text-13">@(generales ? "El archivo no se cargó. Motivo del rechazo:" : "El archivo no se cargó. Corrige las filas indicadas y vuelve a subirlo.")</p>
                 <div class="table-responsive">
                     <table class="table">
                         <thead><tr><th>Fila</th><th>Campo</th><th>Motivo</th></tr></thead>
@@ -105,12 +129,20 @@ else
         {
             <div class="tarjeta compacta">
                 <h2>Planillas del ciclo</h2>
-                <div class="fila">
+                <table class="table table-ajustada m-0">
+                    <thead><tr><th>Planilla</th><th>Estado</th><th>¿Admite nueva carga?</th></tr></thead>
+                    <tbody>
                     @foreach (var p in Model.Planillas)
                     {
-                        <a class="btn btn-sm @(p.Id == Model.Resumen?.Id ? "btn-primary" : "btn-secondary")" href="?planilla=@p.Id">@p.Area.Nombre v@(p.Version)</a>
+                        <tr class="@(p.Id == Model.Resumen?.Id ? "sel" : null)">
+                            <td><a href="?planilla=@p.Id">@p.Area.Nombre v@(p.Version)</a></td>
+                            <td>@Badge.De(p.Estado)</td>
+                            <td class="text-12">@(Model.CicloCerrado ? "No: el ciclo está cerrado." : ProduccionModel.Situacion(p))
+                                @if (!Model.CicloCerrado && p.Estado == PlanillaEstado.Observada) { <a href="/Ciclos/Correcciones?planilla=@p.Id">Ir a Correcciones</a> }</td>
+                        </tr>
                     }
-                </div>
+                    </tbody>
+                </table>
             </div>
         }
     </div>
@@ -137,3 +169,12 @@ else
         </div>
     </div>
 }
+<script>
+    // Aviso inmediato si el área elegida ya tiene una planilla que no admite una nueva carga.
+    (() => {
+        const sel = document.getElementById('p-area'), aviso = document.getElementById('p-area-motivo');
+        if (!sel) return;
+        const ver = () => { const m = sel.selectedOptions[0]?.dataset.motivo; aviso.textContent = m || ''; aviso.hidden = !m; };
+        sel.addEventListener('change', ver); ver();
+    })();
+</script>
