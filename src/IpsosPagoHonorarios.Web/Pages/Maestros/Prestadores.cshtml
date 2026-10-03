@@ -115,9 +115,9 @@
                     @(s.PortalInvitadoEn is null ? "" : "Invitado " + Formato.Fecha(s.PortalInvitadoEn.Value))@(s.PortalActivadoEn is null ? "" : " · activado " + Formato.Fecha(s.PortalActivadoEn.Value)) · usuario <span class="mono">@s.RutPlanilla</span></div>
                 <form method="post" asp-route-id="@s.Id" class="fila m-0">
                     <fieldset disabled="@(!Model.PuedeEditar)" class="fila">
-                        <button class="btn btn-secondary btn-sm" asp-page-handler="Invitar" disabled="@(s.Email is null)">Invitar</button>
-                        <button class="btn btn-secondary btn-sm" asp-page-handler="Restablecer">Restablecer contraseña</button>
-                        <button class="btn btn-secondary btn-sm" asp-page-handler="CopiarEnlace">Copiar enlace de activación</button>
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="Invitar" asp-route-id="@s.Id" disabled="@(s.Email is null)">Invitar</button>
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="Restablecer" asp-route-id="@s.Id">Restablecer contraseña</button>
+                        <button class="btn btn-secondary btn-sm" asp-page-handler="CopiarEnlace" asp-route-id="@s.Id">Copiar enlace de activación</button>
                     </fieldset>
                 </form>
                 @if (Model.Enlace is not null)

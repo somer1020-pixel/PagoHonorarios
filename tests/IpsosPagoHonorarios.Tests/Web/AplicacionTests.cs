@@ -456,4 +456,27 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         using (var scope = app.Services.CreateScope())
             Assert.Equal(CicloEstado.Abierto, (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Ciclos.SingleAsync(c => c.Id == id)).Estado);
     }
+
+    [Fact]
+    public async Task Prestadores_BotonesDelPortal_EnvianElPrestador()
+    {
+        int id;
+        using (var scope = app.Services.CreateScope())
+            id = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Prestadores.FirstAsync(p => p.Email != null && p.UsuarioId == null)).Id;
+        var c = Cliente();
+        await IngresarAsync(c, "andres.paredes@ejemplo.cl");
+        var html = await c.GetStringAsync($"/Maestros/Prestadores?id={id}");
+        foreach (var h in new[] { "Invitar", "Restablecer", "CopiarEnlace" })
+            Assert.Matches($"formaction=\"[^\"]*(id={id}&handler={h}|handler={h}&id={id})\"", html.Replace("&amp;", "&"));
+        var accion = System.Net.WebUtility.HtmlDecode(Regex.Match(html, "formaction=\"([^\"]*handler=Invitar[^\"]*)\"").Groups[1].Value);
+        var r = await c.PostAsync(accion, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = await TokenAsync(c, $"/Maestros/Prestadores?id={id}")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, r.StatusCode);
+        var despues = System.Net.WebUtility.HtmlDecode(await c.GetStringAsync(r.Headers.Location!.OriginalString));
+        Assert.Contains("Invitación enviada por correo", despues);
+        Assert.DoesNotContain("Prestador no encontrado", despues);
+        Assert.Contains("/Cuenta/Activar?u=", despues);
+    }
 }
