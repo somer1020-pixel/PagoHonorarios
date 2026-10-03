@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <!-- En Windows la aplicación se compila para net10.0-windows: habilita el OCR integrado de Windows (Windows.Media.Ocr,
+         componente del sistema firmado por Microsoft). En Linux (CI, contenedores) se usa net10.0 y la OCR va con Tesseract.
+         Para revisar la compilación de Windows desde Linux: -p:OcrWindows=true -p:EnableWindowsTargeting=true -->
+    <TfmApp Condition="'$(TfmApp)' == '' And ('$(OS)' == 'Windows_NT' Or '$(OcrWindows)' == 'true')">net10.0-windows10.0.19041.0</TfmApp>
+    <TfmApp Condition="'$(TfmApp)' == ''">net10.0</TfmApp>
+  </PropertyGroup>
+</Project>

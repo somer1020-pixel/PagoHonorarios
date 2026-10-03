@@ -118,7 +118,7 @@ builder.Services.AddScoped<ExcelPlanilla>();
 builder.Services.AddScoped<PlanillaService>();
 builder.Services.AddScoped<CuentasService>();
 builder.Services.Configure<OpcionesOcr>(cfg.GetSection("Ocr"));
-builder.Services.AddSingleton<ILectorOcr, LectorOcrTesseract>();
+builder.Services.AddSingleton<ILectorOcr, LectorOcr>();
 builder.Services.AddScoped<BoletaService>();
 builder.Services.AddScoped<ProduccionService>();
 builder.Services.AddScoped<RevisionService>();

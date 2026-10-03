@@ -16,7 +16,11 @@ public class OcrBoletaTests(ITestOutputHelper salida)
     private sealed class OcrFijo(List<string>? lineas) : ILectorOcr
     {
         public int Llamadas { get; private set; }
-        public Task<List<string>?> LeerAsync(byte[] pdf, CancellationToken ct = default) { Llamadas++; return Task.FromResult(lineas); }
+        public Task<ResultadoOcr> ReconocerAsync(byte[] pdf, CancellationToken ct = default)
+        {
+            Llamadas++;
+            return Task.FromResult(new ResultadoOcr(lineas, lineas is null ? null : "Fijo", []));
+        }
     }
 
     private static async Task<(Entorno E, Planilla P, Prestador Pr)> PlanillaAsync()
@@ -66,17 +70,20 @@ public class OcrBoletaTests(ITestOutputHelper salida)
     }
 
     [Fact]
-    public async Task Tesseract_LeeLaBoletaDeLaAppDelSii()
+    public async Task Ocr_LeeLaBoletaDeLaAppDelSii()
     {
-        var ocr = new LectorOcrTesseract(Options.Create(new OpcionesOcr()), new HostingEnvironment { ContentRootPath = AppContext.BaseDirectory },
-            NullLogger<LectorOcrTesseract>.Instance);
-        var lineas = await ocr.LeerAsync(BoletaApp);
+        var ocr = new LectorOcr(Options.Create(new OpcionesOcr()), new HostingEnvironment { ContentRootPath = AppContext.BaseDirectory },
+            NullLogger<LectorOcr>.Instance);
+        var r = await ocr.ReconocerAsync(BoletaApp);
+        foreach (var d in r.Detalle) salida.WriteLine(d);
+        var lineas = r.Lineas;
         if (lineas is null && !OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CI") is null)
         {
             salida.WriteLine("Tesseract no está instalado en este equipo: se omite la OCR real (en CI y Windows sí se ejecuta).");
             return;
         }
         Assert.NotNull(lineas);
+        Assert.NotNull(r.Motor);
         var l = LectorBoletaTexto.Leer(lineas);
         Assert.Equal("117", l.Datos.Numero);
         Assert.Equal("12345678-5", l.Datos.RutEmisor);

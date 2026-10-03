@@ -132,13 +132,17 @@ Supuesto bruto vs. líquido (R-04), formato de nómina bancaria, día de pago, P
 ## OCR de boletas sin texto
 
 Algunas boletas (por ejemplo, las compartidas desde la app del SII en el celular) son PDF sin texto: el contenido viene
-dibujado. En ese caso la aplicación convierte la página a imagen (pdfium, paquete `Docnet.Core`) y la lee con
-**Tesseract** en español (`Ocr/tessdata/spa.traineddata`). La lectura por OCR queda con confianza **Media** como máximo
-para que Operaciones o Finanzas confirmen los datos; si la OCR no está disponible, la boleta queda para corrección manual.
+dibujado. En ese caso la aplicación las lee por OCR. La lectura por OCR queda con confianza **Media** como máximo para que
+Operaciones o Finanzas confirmen los datos; si la OCR no está disponible, la boleta queda para corrección manual.
 
-- **Windows (servidor y desarrollo):** no requiere instalación; `x64\tesseract.exe` y sus DLL vienen en el paquete `TesseractOCR`
-  y se copian a la salida. Si Control inteligente de aplicaciones bloquea esos binarios en un PC de desarrollo, la OCR
-  queda desactivada y el resto funciona igual.
-- **Linux:** `sudo apt-get install tesseract-ocr`.
-- Configuración (`appsettings.json`, sección `Ocr`): `Habilitado`, `Tesseract` (ruta del ejecutable), `Tessdata`, `Idioma`.
-
+- **Windows (servidor y desarrollo):** se usa el **OCR integrado de Windows** (Windows.Media.Ocr y Windows.Data.Pdf), componentes
+  del sistema firmados por Microsoft: no hay que instalar nada y Control inteligente de aplicaciones no los bloquea. Por eso, en
+  Windows el proyecto se compila para `net10.0-windows10.0.19041.0` (ver `Directory.Build.props`). Usa el idioma español si
+  está instalado en Windows; si no, el del perfil. Si no hubiera OCR de Windows, se intenta con Tesseract
+  (`x64\tesseract.exe` del paquete `TesseractOCR`, requiere el runtime de Visual C++ 2015-2022).
+- **Linux:** Tesseract del sistema (`sudo apt-get install tesseract-ocr`) con `Ocr/tessdata/spa.traineddata`; la página se
+  convierte a imagen con pdfium (`Docnet.Core`).
+- **Probar:** Administrador → **Maestros → Parámetros → OCR de boletas sin texto → Probar OCR** (con una boleta de prueba o un
+  PDF propio): muestra el motor usado, el detalle de cada intento (o el motivo del error) y los datos leídos.
+- Configuración (`appsettings.json`, sección `Ocr`): `Habilitado`, `Motor` (`Auto`, `Windows` o `Tesseract`), `Tesseract`
+  (ruta del ejecutable), `Tessdata`, `Idioma`.

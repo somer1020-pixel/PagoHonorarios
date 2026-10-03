@@ -76,7 +76,7 @@ public class BoletaService(
         {
             var lineas = LectorPdf.ExtraerLineas(pdf);
             // PDF sin texto (p. ej. compartido desde la app del SII: el texto viene dibujado): se lee por OCR.
-            if (!LectorPdf.TieneTexto(lineas) && ocr is not null && await ocr.LeerAsync(pdf) is { } reconocidas)
+            if (!LectorPdf.TieneTexto(lineas) && ocr is not null && (await ocr.ReconocerAsync(pdf)).Lineas is { } reconocidas)
             {
                 lineas = reconocidas;
                 porOcr = true;

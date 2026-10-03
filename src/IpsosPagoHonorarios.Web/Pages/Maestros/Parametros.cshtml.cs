@@ -10,11 +10,14 @@ namespace IpsosPagoHonorarios.Web.Pages.Maestros;
 
 /// <summary>Parámetros del ciclo de pago y tasa de retención por año: solo el Administrador.</summary>
 [Authorize(Roles = Roles.Admin)]
-public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor auditor) : PaginaBase
+public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor auditor, ILectorOcr ocr) : PaginaBase
 {
     public Parametro P { get; set; } = new();
     public List<TasaRetencion> Tasas { get; set; } = [];
     public List<Ciclo> Abiertos { get; set; } = [];
+    public ResultadoOcr? PruebaOcr { get; set; }
+    public LecturaBoleta? PruebaLectura { get; set; }
+    public string? PruebaArchivo { get; set; }
 
     public async Task OnGetAsync()
     {
@@ -64,6 +67,30 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
             await db.SaveChangesAsync();
             MensajeOk = "Parámetros guardados: " + string.Join(" · ", cambios) + ".";
         }, "Parámetros guardados.", null, [Roles.Admin]);
+
+    /// <summary>Diagnóstico: lee por OCR el PDF indicado (o una boleta ficticia de la app del SII) y muestra motor, detalle y datos.</summary>
+    public async Task<IActionResult> OnPostProbarOcrAsync(IFormFile? pdf)
+    {
+        await OnGetAsync();
+        byte[] bytes;
+        if (pdf is { Length: > 0 })
+        {
+            bytes = await LeerAsync(pdf);
+            PruebaArchivo = pdf.FileName;
+            if (!LectorPdf.EsPdf(bytes)) { MensajeError = "El archivo no es un PDF."; return Page(); }
+        }
+        else
+        {
+            using var s = typeof(ParametrosModel).Assembly.GetManifestResourceStream("BoletaPruebaOcr.pdf")!;
+            using var ms = new MemoryStream();
+            await s.CopyToAsync(ms);
+            bytes = ms.ToArray();
+            PruebaArchivo = "Boleta de prueba ficticia (formato app del SII, sin texto)";
+        }
+        PruebaOcr = await ocr.ReconocerAsync(bytes, HttpContext.RequestAborted);
+        if (PruebaOcr.Lineas is { } l) PruebaLectura = LectorBoletaTexto.Leer(l);
+        return Page();
+    }
 
     public Task<IActionResult> OnPostTasaAsync(int anio, string? tasa) =>
         AccionAsync(async () =>

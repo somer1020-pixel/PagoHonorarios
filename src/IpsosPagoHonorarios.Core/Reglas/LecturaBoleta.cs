@@ -23,6 +23,9 @@ public sealed class OpcionesLectura
 
 public sealed record LecturaBoleta(DatosBoleta Datos, Confianza Confianza, string TextoNormalizado);
 
+/// <summary>Palabra reconocida por OCR con su posición en la imagen (píxeles; Y crece hacia abajo).</summary>
+public sealed record PalabraOcr(double X, double Y, double Alto, string Texto);
+
 /// <summary>Lectura de la boleta a partir del texto extraído del PDF (líneas por posición vertical).</summary>
 public static class LectorBoletaTexto
 {
@@ -102,6 +105,27 @@ public static class LectorBoletaTexto
             Anulada = Regex.IsMatch(texto, @"\bANULADA\b")
         };
         return new(datos, CalcularConfianza(datos), texto);
+    }
+
+    /// <summary>
+    /// Arma líneas a partir de palabras sueltas: misma línea si sus centros verticales distan menos de media altura. Así una
+    /// etiqueta y su monto alineado a la derecha ("Total Honorario $ ... 701.754") quedan en la misma línea.
+    /// </summary>
+    public static List<string> AgruparEnLineas(IEnumerable<PalabraOcr> palabras)
+    {
+        var lineas = new List<List<PalabraOcr>>();
+        foreach (var p in palabras.Where(p => !string.IsNullOrWhiteSpace(p.Texto)).OrderBy(p => p.Y + p.Alto / 2))
+        {
+            var centro = p.Y + p.Alto / 2;
+            var actual = lineas.LastOrDefault();
+            if (actual is not null)
+            {
+                var c = actual.Average(x => x.Y + x.Alto / 2);
+                if (Math.Abs(centro - c) <= Math.Max(p.Alto, actual.Max(x => x.Alto)) / 2) { actual.Add(p); continue; }
+            }
+            lineas.Add([p]);
+        }
+        return lineas.Select(l => string.Join(" ", l.OrderBy(x => x.X).Select(x => x.Texto.Trim()))).ToList();
     }
 
     /// <summary>Alta: todos los campos y bruto − retención = líquido. Media: falta un campo que no es monto. Baja: otro caso.</summary>

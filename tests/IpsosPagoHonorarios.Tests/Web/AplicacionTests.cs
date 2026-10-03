@@ -479,4 +479,22 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.DoesNotContain("Prestador no encontrado", despues);
         Assert.Contains("/Cuenta/Activar?u=", despues);
     }
+
+    [Fact]
+    public async Task Parametros_ProbarOcr_MuestraMotorYDatos()
+    {
+        var adm = Cliente();
+        await IngresarAsync(adm, "admin@ejemplo.cl");
+        var r = await adm.PostAsync("/Maestros/Parametros?handler=ProbarOcr", new MultipartFormDataContent
+        {
+            { new StringContent(await TokenAsync(adm, "/Maestros/Parametros")), "__RequestVerificationToken" }
+        });
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var html = System.Net.WebUtility.HtmlDecode(await r.Content.ReadAsStringAsync());
+        Assert.Contains("Boleta de prueba ficticia", html);
+        if (html.Contains("La OCR no está disponible") && !OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("CI") is null) return;   // sin Tesseract local
+        Assert.Contains("OCR correcta con", html);
+        Assert.Contains("12345678-5", html);
+        Assert.Contains("$471.976", html);
+    }
 }

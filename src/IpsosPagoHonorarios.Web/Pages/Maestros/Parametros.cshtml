@@ -60,3 +60,34 @@
         <span class="text-12 muted">Si el año ya existe, se reemplaza. Un año sin tasa usa la del último año anterior configurado. Cambiar la tasa de un año en curso afecta los cálculos de las boletas que se concilien desde ahora.</span>
     </div>
 </div>
+<div class="tarjeta">
+    <h2>OCR de boletas sin texto</h2>
+    <p class="m-0 text-13 muted">Las boletas compartidas desde la app del SII son PDF sin texto: se leen por OCR (en Windows, el OCR integrado de Windows; si no está disponible, Tesseract). Prueba aquí si la OCR funciona en este equipo.</p>
+    <form method="post" asp-page-handler="ProbarOcr" enctype="multipart/form-data" class="d-flex flex-wrap gap-2 align-items-end">
+        <div><label class="form-label" for="ocr-pdf">PDF de boleta (opcional; sin archivo se usa una boleta de prueba ficticia)</label>
+            <input id="ocr-pdf" type="file" name="pdf" accept="application/pdf" class="form-control form-control-sm" /></div>
+        <button class="btn btn-secondary btn-sm">Probar OCR</button>
+    </form>
+    @if (Model.PruebaOcr is { } r)
+    {
+        <div class="aviso @(r.Lineas is null ? "aviso-danger" : "aviso-info") text-13 d-flex flex-column gap-1">
+            <strong>@(r.Lineas is null ? "La OCR no está disponible en este equipo" : $"OCR correcta con {r.Motor}") · @Model.PruebaArchivo</strong>
+            @foreach (var d in r.Detalle) { <span class="mono text-12">@d</span> }
+        </div>
+        @if (Model.PruebaLectura is { } l)
+        {
+            var d = l.Datos;
+            <dl class="dl-grid">
+                <dt>N° boleta</dt><dd class="mono">@(d.Numero ?? "—")</dd>
+                <dt>RUT emisor</dt><dd class="mono">@(d.RutEmisor ?? "—")</dd>
+                <dt>Nombre</dt><dd>@(d.NombreEmisor ?? "—")</dd>
+                <dt>RUT receptor</dt><dd class="mono">@(d.RutReceptor ?? "—")</dd>
+                <dt>Fecha</dt><dd class="tabular">@Formato.Fecha(d.FechaEmision)</dd>
+                <dt>Bruto · retención · líquido</dt><dd class="tabular">@Formato.Clp(d.Bruto) · @Formato.Clp(d.Retencion) · @Formato.Clp(d.Liquido)</dd>
+                <dt>Confianza</dt><dd>@Badge.De(l.Confianza)</dd>
+            </dl>
+            <details><summary class="text-12">Texto reconocido</summary><pre class="text-12 m-0">@string.Join("\n", r.Lineas!)</pre></details>
+        }
+    }
+</div>
+

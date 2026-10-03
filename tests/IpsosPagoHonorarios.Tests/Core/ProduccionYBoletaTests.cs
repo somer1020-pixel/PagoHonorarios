@@ -187,4 +187,17 @@ public class ProduccionYBoletaTests
         Assert.False(LectorPdf.TieneTexto(["", " ", "·"]));
         Assert.True(LectorPdf.TieneTexto(lineas));
     }
+
+    [Fact]
+    public void Ocr_PalabrasSueltasSeAgrupanPorLinea()
+    {
+        // Windows separa la etiqueta y el monto alineado a la derecha: se reagrupan por altura.
+        PalabraOcr[] palabras =
+        [
+            new(700, 1002, 30, "701.754"), new(300, 1000, 30, "Total"), new(380, 1001, 30, "Honorario"), new(520, 1000, 30, "$"),
+            new(300, 1050, 30, "14,5%"), new(700, 1052, 30, "101.754"), new(400, 1050, 30, "Impto."), new(500, 1051, 30, "retenido"),
+            new(250, 1110, 40, "Total"), new(690, 1112, 40, "600.000")
+        ];
+        Assert.Equal(["Total Honorario $ 701.754", "14,5% Impto. retenido 101.754", "Total 600.000"], LectorBoletaTexto.AgruparEnLineas(palabras));
+    }
 }
