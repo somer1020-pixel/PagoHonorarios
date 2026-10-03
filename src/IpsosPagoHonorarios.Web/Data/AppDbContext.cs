@@ -88,7 +88,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
         });
         m.Entity<Planilla>(e =>
         {
-            e.HasIndex(x => new { x.CicloId, x.AreaId }).IsUnique();
+            e.HasIndex(x => new { x.CicloId, x.AreaId, x.Numero }).IsUnique();
+            e.Property(x => x.Numero).HasDefaultValue(1);
+            e.Property(x => x.Nombre).HasMaxLength(100);
+            e.Ignore(x => x.Titulo);
             e.HasQueryFilter(x => AreasVisibles == null || AreasVisibles.Contains(x.AreaId));
             e.HasMany(x => x.Lineas).WithOne(x => x.Planilla).HasForeignKey(x => x.PlanillaId);
             e.HasMany(x => x.Boletas).WithOne(x => x.Planilla).HasForeignKey(x => x.PlanillaId);

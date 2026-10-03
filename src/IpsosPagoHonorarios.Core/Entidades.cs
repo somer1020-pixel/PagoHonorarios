@@ -79,6 +79,12 @@ public class Planilla : EntidadAuditable
     public string ResponsableEmail { get; set; } = "";
     public PlanillaEstado Estado { get; set; } = PlanillaEstado.Borrador;
     public int Version { get; set; } = 1;
+    /// <summary>Correlativo de la planilla dentro del ciclo y el área (un área puede tener varias planillas por ciclo).</summary>
+    public int Numero { get; set; } = 1;
+    /// <summary>Nombre corto opcional para distinguirla (ej. «Estudio Retail»).</summary>
+    public string? Nombre { get; set; }
+    /// <summary>Área + nombre (o «#n» si no tiene nombre y no es la primera). Requiere el Área cargada.</summary>
+    public string Titulo => (Area?.Nombre ?? "") + (!string.IsNullOrWhiteSpace(Nombre) ? $" · {Nombre}" : Numero > 1 ? $" #{Numero}" : "");
     public List<LineaPago> Lineas { get; set; } = [];
     public List<BoletaHonorarios> Boletas { get; set; } = [];
     public List<Devolucion> Devoluciones { get; set; } = [];

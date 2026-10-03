@@ -25,7 +25,7 @@ public class ValidacionCuentasModel(
     {
         await ctx.CargarAsync();
         if (ctx.Ciclo is null) return;
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         var id = Planilla ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.ConAlertasCuenta)?.Id ?? Planillas.FirstOrDefault()?.Id;
         if (id is null) return;
         P = await ciclos.PlanillaCompletaAsync(id.Value);
@@ -68,7 +68,7 @@ public class ValidacionCuentasModel(
         {
             var tipoGasto = await db.LineasPago.Where(l => l.PlanillaId == p.Id).Select(l => l.TipoGasto).FirstOrDefaultAsync() ?? "Costo Directo";
             var r = await produccion.ImportarAsync(new SolicitudImportacion(p.CicloId, p.AreaId, tipoGasto, p.ResponsableNombre, p.ResponsableEmail,
-                tipoArchivo, archivo.FileName, await LeerAsync(archivo)));
+                tipoArchivo, archivo.FileName, await LeerAsync(archivo), PlanillaId: p.Id));
             if (r.Cargada) MensajeOk = $"Versión v{r.Planilla!.Version} cargada y validada completa.";
             else MensajeError = "La versión corregida no se cargó: " + string.Join(" · ", r.Errores.Take(5).Select(e => $"fila {e.Fila} {e.Campo}: {e.Motivo}"));
         }

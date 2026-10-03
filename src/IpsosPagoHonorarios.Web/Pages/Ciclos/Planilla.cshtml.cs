@@ -21,7 +21,7 @@ public class PlanillaModel(AppDbContext db, ContextoLayout ctx, CicloService cic
     {
         await ctx.CargarAsync();
         if (ctx.Ciclo is null) return;
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         var id = Id ?? Planillas.FirstOrDefault()?.Id;
         if (id is null) return;
         P = await ciclos.PlanillaCompletaAsync(id.Value);
@@ -38,7 +38,7 @@ public class PlanillaModel(AppDbContext db, ContextoLayout ctx, CicloService cic
         var p = await ciclos.PlanillaCompletaAsync(Id ?? 0);
         if (p is null) return NotFound();
         var bytes = await excel.ExportarAsync(p);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Area.Nombre, p.Version));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Titulo, p.Version));
     }
 
     public Task<IActionResult> OnPostEnviarAsync() =>

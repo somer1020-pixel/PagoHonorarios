@@ -18,7 +18,7 @@ public class PlanillaService(
         var antes = p.Estado;
         p.Estado = PlanillaEstado.EnRevision;
         await ArchivarVersionAsync(p);
-        auditor.Registrar(nameof(Planilla), p.Id, "Enviar a Finanzas", $"{p.Area.Nombre} v{p.Version}: {antes} → EnRevision");
+        auditor.Registrar(nameof(Planilla), p.Id, "Enviar a Finanzas", $"{p.Titulo} v{p.Version}: {antes} → EnRevision");
         await db.SaveChangesAsync();
     }
 
@@ -36,14 +36,14 @@ public class PlanillaService(
         p.Version += 1;
         p.Estado = PlanillaEstado.EnRevision;
         await ArchivarVersionAsync(p);
-        auditor.Registrar(nameof(Planilla), p.Id, "Reenviar a Finanzas", $"{p.Area.Nombre} v{p.Version} (a tiempo)");
+        auditor.Registrar(nameof(Planilla), p.Id, "Reenviar a Finanzas", $"{p.Titulo} v{p.Version} (a tiempo)");
         await db.SaveChangesAsync();
     }
 
     public async Task ArchivarVersionAsync(Planilla p)
     {
         var bytes = await excel.ExportarAsync(p);
-        var nombre = Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Area.Nombre, p.Version);
+        var nombre = Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Titulo, p.Version);
         var ruta = archivos.Guardar($"planillas/{p.Ciclo.Codigo}", nombre, bytes);
         db.PlanillaArchivos.Add(new PlanillaArchivo { PlanillaId = p.Id, Version = p.Version, NombreArchivo = nombre, Ruta = ruta, Tipo = "Planilla" });
         auditor.Registrar(nameof(PlanillaArchivo), p.Id, "Archivar versión", nombre);
@@ -65,17 +65,22 @@ public class PlanillaService(
 
         var siguiente = await ciclos.ObtenerOCrearAsync(p.Ciclo.Periodo.AddMonths(1));
         if (siguiente.Id == 0) await db.SaveChangesAsync();
-        var destino = db.Planillas.Local.FirstOrDefault(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId)
-                      ?? await db.Planillas.Include(x => x.Lineas).FirstOrDefaultAsync(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId);
+        // Destino: la planilla equivalente (misma área y mismo nombre) del ciclo siguiente; si no existe, se crea.
+        var destino = db.Planillas.Local.Where(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId && x.Nombre == p.Nombre).OrderBy(x => x.Numero).FirstOrDefault()
+                      ?? await db.Planillas.IgnoreQueryFilters().Include(x => x.Lineas)
+                          .Where(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId && x.Nombre == p.Nombre).OrderBy(x => x.Numero).FirstOrDefaultAsync();
         if (destino is null)
         {
+            var numeros = db.Planillas.Local.Where(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId).Select(x => x.Numero)
+                .Concat(await db.Planillas.IgnoreQueryFilters().Where(x => x.CicloId == siguiente.Id && x.AreaId == p.AreaId).Select(x => x.Numero).ToListAsync())
+                .ToList();
             destino = new Planilla
             {
-                CicloId = siguiente.Id, AreaId = p.AreaId, FechaRecepcion = ciclos.Hoy,
-                ResponsableNombre = p.ResponsableNombre, ResponsableEmail = p.ResponsableEmail
+                CicloId = siguiente.Id, AreaId = p.AreaId, Area = p.Area, Nombre = p.Nombre, Numero = numeros.Count == 0 ? 1 : numeros.Max() + 1,
+                FechaRecepcion = ciclos.Hoy, ResponsableNombre = p.ResponsableNombre, ResponsableEmail = p.ResponsableEmail
             };
             db.Planillas.Add(destino);
-            auditor.Registrar(nameof(Planilla), $"{siguiente.Codigo}/{p.Area.Nombre}", "Crear planilla por diferimiento");
+            auditor.Registrar(nameof(Planilla), $"{siguiente.Codigo}/{destino.Titulo}", "Crear planilla por diferimiento");
         }
         var numero = destino.Lineas.Count == 0 ? 0 : destino.Lineas.Max(l => l.Numero);
         foreach (var l in lineas)
@@ -94,10 +99,10 @@ public class PlanillaService(
         }
         var prest = lineas[0].Prestador;
         auditor.Registrar(nameof(LineaPago), string.Join(",", lineas.Select(l => l.Numero)), "Diferir",
-            $"{p.Area.Nombre} {p.Ciclo.Codigo} → {siguiente.Codigo}: {prest?.NombreCompleto} ({motivo})");
+            $"{p.Titulo} {p.Ciclo.Codigo} → {siguiente.Codigo}: {prest?.NombreCompleto} ({motivo})");
         if (prest is not null)
             correos.Encolar(prest.Email, $"Tu pago de {p.Ciclo.Codigo} pasa a {siguiente.Codigo}",
-                $"Hola {prest.NombreCompleto}: tus filas de la planilla {p.Area.Nombre} se pagarán en el ciclo {siguiente.Codigo}. Motivo: {motivo}.");
+                $"Hola {prest.NombreCompleto}: tus filas de la planilla {p.Titulo} se pagarán en el ciclo {siguiente.Codigo}. Motivo: {motivo}.");
 
         // Sin alertas pendientes la planilla vuelve a Borrador (R-25).
         if (p.Estado == PlanillaEstado.ConAlertasCuenta && !p.Activas().Any(l => l.AlertaAbierta))

@@ -8,7 +8,10 @@ public enum TipoArchivoProduccion { Exportacion, Finanzas }
 
 public sealed record SolicitudImportacion(
     int CicloId, int AreaId, string TipoGasto, string Responsable, string ResponsableEmail,
-    TipoArchivoProduccion TipoArchivo, string NombreArchivo, byte[] Contenido);
+    TipoArchivoProduccion TipoArchivo, string NombreArchivo, byte[] Contenido,
+    // Destino: PlanillaId = reemplazar esa planilla (nueva versión); NuevaPlanilla = crear otra planilla del área en el ciclo.
+    // Sin ninguno: si el área no tiene planilla en el ciclo se crea; si tiene una sola se reemplaza; si tiene varias hay que elegir.
+    int? PlanillaId = null, bool NuevaPlanilla = false, string? NombrePlanilla = null);
 
 public sealed record ResultadoImportacion(bool Cargada, List<ErrorFila> Errores, List<string> Avisos, Planilla? Planilla);
 
@@ -79,9 +82,40 @@ public class ProduccionService(
         if (leido.Encabezado?.Area is { Length: > 0 } areaArchivo && !areaArchivo.Equals(area!.Nombre, StringComparison.OrdinalIgnoreCase))
             avisos.Add($"El archivo indica el área «{areaArchivo}» (B4), pero se cargó en {area.Nombre}.");
 
-        var planilla = await db.Planillas.Include(p => p.Lineas).FirstOrDefaultAsync(p => p.CicloId == ciclo!.Id && p.AreaId == area!.Id);
+        // Un área puede tener varias planillas en el ciclo: se reemplaza la indicada o se crea una nueva.
+        var delArea = await db.Planillas.IgnoreQueryFilters().Include(p => p.Area).Where(p => p.CicloId == ciclo!.Id && p.AreaId == area!.Id).ToListAsync();
+        var nombrePlanilla = string.IsNullOrWhiteSpace(s.NombrePlanilla) ? null : s.NombrePlanilla.Trim();
+        if (nombrePlanilla is { Length: > 100 }) errores.Add(new(0, "Nombre de la planilla", "Máximo 100 caracteres."));
+        Planilla? planilla = null;
+        if (s.PlanillaId is { } pid)
+        {
+            planilla = delArea.FirstOrDefault(p => p.Id == pid);
+            if (planilla is null) errores.Add(new(0, "Planilla", $"La planilla a reemplazar no es del área {area!.Nombre} en {ciclo!.Codigo}."));
+        }
+        else if (!s.NuevaPlanilla && delArea.Count == 1) planilla = delArea[0];
+        else if (!s.NuevaPlanilla && delArea.Count > 1)
+            errores.Add(new(0, "Planilla", $"El área {area!.Nombre} tiene {delArea.Count} planillas en {ciclo!.Codigo}: indica cuál reemplazar o si es una planilla nueva."));
+        if (planilla is null && nombrePlanilla is not null && delArea.Any(p => string.Equals(p.Nombre, nombrePlanilla, StringComparison.OrdinalIgnoreCase)))
+            errores.Add(new(0, "Nombre de la planilla", $"Ya existe la planilla «{area!.Nombre} · {nombrePlanilla}» en {ciclo!.Codigo}: elige reemplazarla o usa otro nombre."));
         if (planilla is not null && planilla.Estado is not (PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta))
-            errores.Add(new(0, "Planilla", $"La planilla {area!.Nombre} de {ciclo!.Codigo} ya fue enviada a Finanzas ({planilla.Estado.Nombre()})."));
+            errores.Add(new(0, "Planilla", $"La planilla {planilla.Titulo} de {ciclo!.Codigo} ya fue enviada a Finanzas ({planilla.Estado.Nombre()})."));
+        if (planilla is not null) await db.Entry(planilla).Collection(p => p.Lineas).LoadAsync();
+
+        // Posible duplicado: filas idénticas (RUT, Job, glosa, cantidad y valor) en otra planilla del área en el ciclo.
+        if (errores.Count == 0 && delArea.Any(p => p.Id != planilla?.Id))
+        {
+            var otras = delArea.Where(p => p.Id != planilla?.Id).Select(p => p.Id).ToList();
+            var existentes = await db.LineasPago.IgnoreQueryFilters().Where(l => otras.Contains(l.PlanillaId) && l.Estado != LineaEstado.Diferida)
+                .Select(l => new { l.PlanillaId, l.Prestador.Rut, l.Job.JobBookNumber, l.Glosa.NombreGlosa, l.Cantidad, l.ValorUnitarioBruto }).ToListAsync();
+            foreach (var g in existentes.GroupBy(x => x.PlanillaId))
+            {
+                var claves = g.Select(x => (x.Rut, x.JobBookNumber.Trim(), x.NombreGlosa, x.Cantidad, x.ValorUnitarioBruto)).ToHashSet();
+                var repetidas = filas.Count(f => RutHelper.TryParse(f.Rut, out var r, out _) && f.Job is not null && f.Glosa is not null &&
+                                                 claves.Contains((r, f.Job.Trim(), f.Glosa.Trim(), f.Cantidad ?? 0, f.ValorUnitario ?? 0)));
+                if (repetidas > 0)
+                    avisos.Add($"Posible duplicado: {repetidas} de {filas.Count} filas son idénticas a filas de la planilla {delArea.First(p => p.Id == g.Key).Titulo}. Revisa que no se pague dos veces.");
+            }
+        }
 
         if (errores.Count > 0)
         {
@@ -113,13 +147,18 @@ public class ProduccionService(
         }
         if (planilla is null)
         {
-            planilla = new Planilla { CicloId = ciclo!.Id, AreaId = area!.Id };
+            planilla = new Planilla
+            {
+                CicloId = ciclo!.Id, AreaId = area!.Id, Area = area, Nombre = nombrePlanilla,
+                Numero = delArea.Count == 0 ? 1 : delArea.Max(p => p.Numero) + 1
+            };
             db.Planillas.Add(planilla);
         }
         else
         {
             // Nueva versión corregida: se reemplazan las filas (se conservan las diferidas desde el ciclo anterior).
             planilla.Version += 1;
+            if (nombrePlanilla is not null) planilla.Nombre = nombrePlanilla;
             var reemplazadas = planilla.Lineas.Where(l => l.DiferidaDesdeCicloId is null).ToList();
             var ids = reemplazadas.Select(l => l.Id).ToList();
             if (await db.Observaciones.AnyAsync(o => ids.Contains(o.LineaPagoId)))
@@ -162,7 +201,7 @@ public class ProduccionService(
         db.PlanillaArchivos.Add(new PlanillaArchivo { PlanillaId = planilla.Id, Version = planilla.Version, NombreArchivo = s.NombreArchivo, Ruta = ruta, Tipo = "Original" });
         var total = completa.Activas().Sum(l => l.ValorTotalBruto);
         auditor.Registrar(nameof(Planilla), planilla.Id, "Importar producción",
-            $"{area!.Nombre} v{planilla.Version}: {filas.Count} líneas, {Formato.Clp(total)} ({s.NombreArchivo})");
+            $"{planilla.Titulo} v{planilla.Version}: {filas.Count} líneas, {Formato.Clp(total)} ({s.NombreArchivo})");
 
         // R-21: aviso al generarse su pago.
         var tasa = await parametros.TasaAsync(ciclo.Periodo.Year);

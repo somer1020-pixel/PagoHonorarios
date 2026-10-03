@@ -52,7 +52,7 @@ public class RevisionService(
         p.Estado = PlanillaEstado.Observada;
 
         var vence = Formato.FechaHora(d.VenceEn);
-        correos.Encolar(p.ResponsableEmail, $"Planilla {p.Area.Nombre} v{p.Version} devuelta por Finanzas (vence {Formato.Hora(d.VenceEn)})",
+        correos.Encolar(p.ResponsableEmail, $"Planilla {p.Titulo} v{p.Version} devuelta por Finanzas (vence {Formato.Hora(d.VenceEn)})",
             $"Hola {p.ResponsableNombre}: Finanzas devolvió la planilla con {abiertas.Count} observaciones. Tienes hasta {vence}. Lo que no se corrija pasa al ciclo siguiente.\n" +
             string.Join("\n", abiertas.Select(o => $"Línea {o.LineaPago.Numero} · {o.Tipo.Nombre()} · {o.Campo}: {o.Detalle}")));
         foreach (var g in abiertas.Where(o => o.Tipo is ObservacionTipo.FaltaBoleta or ObservacionTipo.DiferenciaMontos).GroupBy(o => o.LineaPago.PrestadorId))
@@ -63,7 +63,7 @@ public class RevisionService(
             correos.Encolar(prest.Email, $"Tu boleta fue observada (plazo {Formato.Plazo(par.PlazoCorreccionMinutos)})",
                 $"Hola {prest.NombreCompleto}: {string.Join(" ", g.Select(o => o.Detalle))} Sube una nueva boleta en el portal antes de {vence}.");
         }
-        auditor.Registrar(nameof(Planilla), p.Id, "Devolver planilla", $"{p.Area.Nombre} v{p.Version} con {abiertas.Count} observaciones; vence {vence}");
+        auditor.Registrar(nameof(Planilla), p.Id, "Devolver planilla", $"{p.Titulo} v{p.Version} con {abiertas.Count} observaciones; vence {vence}");
         await db.SaveChangesAsync();
         return d;
     }
@@ -144,7 +144,7 @@ public class RevisionService(
             b.ConfirmadaPor ??= usuario.Nombre;
             b.ConfirmadaEn ??= ciclos.AhoraUtc;
         }
-        auditor.Registrar(nameof(Planilla), p.Id, "Aprobar planilla", $"{p.Area.Nombre} v{p.Version}");
+        auditor.Registrar(nameof(Planilla), p.Id, "Aprobar planilla", $"{p.Titulo} v{p.Version}");
         await db.SaveChangesAsync();
     }
 }
@@ -168,8 +168,8 @@ public class PlazosService(AppDbContext db, CicloService ciclos, PlanillaService
             d.Resultado = DevolucionResultado.Vencida;
             if (p.Estado == PlanillaEstado.Observada) p.Estado = PlanillaEstado.EnRevision;
             auditor.Registrar(nameof(Devolucion), d.Id, "Plazo vencido",
-                $"{p.Area.Nombre} v{p.Version}: {aDiferir.Count} filas diferidas; el resto sigue en revisión");
-            correos.Encolar(p.ResponsableEmail, $"Plazo vencido: {p.Area.Nombre} {p.Ciclo.Codigo}",
+                $"{p.Titulo} v{p.Version}: {aDiferir.Count} filas diferidas; el resto sigue en revisión");
+            correos.Encolar(p.ResponsableEmail, $"Plazo vencido: {p.Titulo} {p.Ciclo.Codigo}",
                 $"Venció el plazo de corrección. {aDiferir.Count} filas pasaron al ciclo siguiente.");
             await db.SaveChangesAsync(ct);
         }

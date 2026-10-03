@@ -46,7 +46,7 @@ public class IndexModel(AppDbContext db, ContextoLayout ctx, Parametros parametr
         Bitacora = await db.Auditorias.Where(a => propio == null || a.Usuario == propio).OrderByDescending(a => a.Id).Take(8).ToListAsync();
         if (Ciclo is null) return;
         Planillas = await db.Planillas.Where(p => p.CicloId == Ciclo.Id).Include(p => p.Area).Include(p => p.Lineas).Include(p => p.Boletas)
-            .AsSplitQuery().OrderBy(p => p.Area.Nombre).ToListAsync();
+            .AsSplitQuery().OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         Vencida = await db.Devoluciones.Include(d => d.Planilla).ThenInclude(p => p.Area)
             .Where(d => d.Planilla.CicloId == Ciclo.Id && d.Resultado == DevolucionResultado.Vencida).OrderByDescending(d => d.Id).FirstOrDefaultAsync();
         var tasa = await parametros.TasaAsync(Ciclo.Periodo.Year);

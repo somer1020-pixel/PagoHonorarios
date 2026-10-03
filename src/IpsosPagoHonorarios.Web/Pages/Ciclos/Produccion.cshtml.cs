@@ -24,6 +24,9 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     [BindProperty] public string Responsable { get; set; } = "";
     [BindProperty] public string ResponsableEmail { get; set; } = "";
     [BindProperty] public IFormFile? Archivo { get; set; }
+    /// <summary>"nueva" = otra planilla del área en el ciclo; un Id = reemplazar esa planilla (nueva versión).</summary>
+    [BindProperty] public string? Destino { get; set; }
+    [BindProperty] public string? NombrePlanilla { get; set; }
     [BindProperty(SupportsGet = true)] public int? Planilla { get; set; }
 
     public bool PuedeCargar => Puede(Roles.Operaciones);
@@ -35,8 +38,8 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     /// <summary>Por qué la planilla de un área no admite una nueva carga (null = la admite).</summary>
     public static string? MotivoSinCarga(Planilla p) => p.Estado switch
     {
-        PlanillaEstado.EnRevision => "Enviada a Finanzas y en revisión: no admite una nueva carga.",
-        PlanillaEstado.Observada => "Finanzas la observó: las correcciones se hacen en Correcciones, no con una nueva carga.",
+        PlanillaEstado.EnRevision => "Enviada a Finanzas y en revisión: no se puede reemplazar.",
+        PlanillaEstado.Observada => "Finanzas la observó: las correcciones se hacen en Correcciones, no reemplazándola.",
         PlanillaEstado.Aprobada => "Aprobada por Finanzas: solo lectura.",
         PlanillaEstado.EnPago => "En pago: solo lectura.",
         PlanillaEstado.Cerrada => "Cerrada: solo lectura.",
@@ -44,8 +47,8 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     };
 
     public static string Situacion(Planilla p) => MotivoSinCarga(p) ?? (p.Estado == PlanillaEstado.ConAlertasCuenta
-        ? "Con alertas de cuenta (revísalas en Validación de cuentas). Admite una nueva carga, que reemplaza la versión actual."
-        : "Admite una nueva carga, que reemplaza la versión actual.");
+        ? "Con alertas de cuenta (revísalas en Validación de cuentas). Se puede reemplazar con una versión corregida."
+        : "Se puede reemplazar con una versión corregida.");
 
     private async Task CargarAsync()
     {
@@ -58,7 +61,7 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
         AvisoVentana = ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta);
         Ventana = $"días {par.DiaDescargaDesde} a {par.DiaDescargaHasta}";
         if (Ciclo is null) return;
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         if (CicloCerrado)
         {
             CicloAbierto = await db.Ciclos.Where(c => c.Estado == CicloEstado.Abierto).OrderByDescending(c => c.Periodo).FirstOrDefaultAsync();
@@ -111,10 +114,17 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
             Resultado = new(false, [new(0, "Archivo", "Selecciona un archivo XLSX o CSV.")], [], null);
             return Page();
         }
+        int? reemplazar = int.TryParse(Destino, out var id) ? id : null;
+        var nueva = Destino == "nueva" || (reemplazar is null && Planillas.All(p => p.AreaId != AreaId));
+        if (reemplazar is null && !nueva)
+        {
+            Resultado = new(false, [new(0, "Planilla", "El área ya tiene planillas en este ciclo: elige si es una planilla nueva o cuál reemplazar.")], [], null);
+            return Page();
+        }
         try
         {
             Resultado = await produccion.ImportarAsync(new SolicitudImportacion(Ciclo.Id, AreaId, TipoGasto, Responsable, ResponsableEmail,
-                TipoArchivo, Archivo.FileName, await LeerAsync(Archivo)));
+                TipoArchivo, Archivo.FileName, await LeerAsync(Archivo), reemplazar, nueva, NombrePlanilla));
         }
         catch (ReglaException ex)
         {
@@ -122,7 +132,7 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
         }
         if (!Resultado.Cargada) return Page();
         var p = Resultado.Planilla!;
-        MensajeOk = $"Planilla {p.Area.Nombre} v{p.Version} generada: {p.Activas().Count()} líneas, {Formato.Clp(p.Activas().Sum(l => l.ValorTotalBruto))}." +
+        MensajeOk = $"Planilla {p.Titulo} v{p.Version} generada: {p.Activas().Count()} líneas, {Formato.Clp(p.Activas().Sum(l => l.ValorTotalBruto))}." +
                     (Resultado.Avisos.Count > 0 ? " Avisos: " + string.Join(" ", Resultado.Avisos) : "");
         return p.Estado == PlanillaEstado.ConAlertasCuenta
             ? RedirectToPage("/Ciclos/ValidacionCuentas", new { planilla = p.Id })

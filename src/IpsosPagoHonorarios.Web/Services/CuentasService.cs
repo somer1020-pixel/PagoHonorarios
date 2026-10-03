@@ -110,7 +110,7 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
         }
         ActualizarEstadoAlertas(p);
         auditor.Registrar(nameof(Planilla), p.Id, "Validar cuentas",
-            $"{p.Area.Nombre} v{p.Version}: " + string.Join(" · ", activas.GroupBy(l => l.PrestadorId)
+            $"{p.Titulo} v{p.Version}: " + string.Join(" · ", activas.GroupBy(l => l.PrestadorId)
                 .Select(g => g.First().ResultadoCuenta).GroupBy(r => r).Select(g => $"{g.Key.Nombre()} {g.Count()}")));
     }
 
@@ -176,7 +176,7 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
         };
         db.SolicitudesCorreccion.Add(s);
         Enviar(p, s, filas);
-        auditor.Registrar(nameof(SolicitudCorreccion), p.Id, "Solicitar corrección", $"{p.Area.Nombre} v{p.Version}: filas {string.Join(", ", filas.Select(f => f.Fila))}");
+        auditor.Registrar(nameof(SolicitudCorreccion), p.Id, "Solicitar corrección", $"{p.Titulo} v{p.Version}: filas {string.Join(", ", filas.Select(f => f.Fila))}");
         await db.SaveChangesAsync();
         return s;
     }
@@ -195,7 +195,7 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
     private void Enviar(Planilla p, SolicitudCorreccion s, List<FilaSolicitud> filas)
     {
         var cuerpo = s.Mensaje + "\n\n" + string.Join("\n", filas.Select(f => $"Fila {f.Fila} · {f.Prestador} · {f.Resultado} · {f.QueCorregir}"));
-        correos.Encolar(ExtraerCorreo(s.EnviadaA), $"Corrección de cuentas: planilla {p.Area.Nombre} v{s.Version} ({p.Ciclo.Codigo})", cuerpo);
+        correos.Encolar(ExtraerCorreo(s.EnviadaA), $"Corrección de cuentas: planilla {p.Titulo} v{s.Version} ({p.Ciclo.Codigo})", cuerpo);
     }
 
     private static string ExtraerCorreo(string para)

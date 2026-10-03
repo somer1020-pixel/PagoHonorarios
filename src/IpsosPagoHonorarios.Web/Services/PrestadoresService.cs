@@ -146,7 +146,7 @@ public class PortalService(AppDbContext db, Parametros parametros)
             .Where(p => p.Lineas.Any(l => l.PrestadorId == prestadorId) && p.Ciclo.Estado == CicloEstado.Abierto)
             .AsNoTracking().AsSplitQuery().ToListAsync();
         var res = new List<PlanillaPortal>();
-        foreach (var p in planillas.OrderByDescending(p => p.Ciclo.Periodo).ThenBy(p => p.Area.Nombre))
+        foreach (var p in planillas.OrderByDescending(p => p.Ciclo.Periodo).ThenBy(p => p.Area.Nombre).ThenBy(p => p.Numero))
         {
             // R-17: aun si la consulta trajera más filas, aquí solo quedan las del prestador.
             p.Lineas = p.Lineas.Where(l => l.PrestadorId == prestadorId).ToList();

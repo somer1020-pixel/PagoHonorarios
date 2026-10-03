@@ -29,7 +29,7 @@ public class RevisionModel(Parametros parametros, AppDbContext db, ContextoLayou
         await ctx.CargarAsync();
         PlazoCorreccion = Formato.Plazo((await parametros.ObtenerAsync()).PlazoCorreccionMinutos);
         if (ctx.Ciclo is null) return;
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         var id = Planilla ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.EnRevision)?.Id ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.Observada)?.Id ?? Planillas.FirstOrDefault()?.Id;
         if (id is null) return;
         P = await ciclos.PlanillaCompletaAsync(id.Value);
@@ -74,7 +74,7 @@ public class RevisionModel(Parametros parametros, AppDbContext db, ContextoLayou
         if (archivoId is not null) return NotFound();
         var p = await ciclos.PlanillaCompletaAsync(id);
         if (p is null) return NotFound();
-        return File(await excel.ExportarAsync(p), TipoXlsx, Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Area.Nombre, p.Version));
+        return File(await excel.ExportarAsync(p), TipoXlsx, Formato.NombreArchivoPlanilla(p.Ciclo.Periodo, p.Titulo, p.Version));
     }
 
     private object Ruta => new { planilla = Planilla, prestador = Prestador };

@@ -28,7 +28,7 @@ public class PagosModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos
         if (Ciclo is null) return;
         Hoy = ciclos.Hoy;
         Tasa = await parametros.TasaAsync(Ciclo.Periodo.Year);
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         var cicloCompleto = await db.Ciclos.Include(c => c.Planillas).ThenInclude(p => p.Lineas).FirstAsync(c => c.Id == Ciclo.Id);
         Cierre = Flujo.PuedeCerrar(cicloCompleto);
         Diferidas = await db.LineasPago.Include(l => l.Prestador).Include(l => l.Planilla).ThenInclude(p => p.Area)

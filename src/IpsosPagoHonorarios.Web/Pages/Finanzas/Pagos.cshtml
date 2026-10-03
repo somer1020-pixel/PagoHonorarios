@@ -9,7 +9,7 @@
 }
 <div class="encabezado">
     <div>
-        <div class="ruta">Finanzas / @(Model.Ciclo?.Codigo ?? "—") / @(p?.Area.Nombre ?? "—")</div>
+        <div class="ruta">Finanzas / @(Model.Ciclo?.Codigo ?? "—") / @(p?.Titulo ?? "—")</div>
         <h1>Pagos y cierre</h1>
         <div class="rol">Rol: Finanzas</div>
     </div>
@@ -80,7 +80,7 @@
             <h2>Diferidos · @Model.Ciclo!.Codigo</h2>
             @foreach (var l in Model.Diferidas)
             {
-                <div class="d-flex justify-content-between gap-2 text-13"><span>@l.Prestador.NombreCompleto · @l.Planilla.Area.Nombre línea @l.Numero</span><span class="tabular">@Formato.Clp(l.ValorTotalBruto)</span></div>
+                <div class="d-flex justify-content-between gap-2 text-13"><span>@l.Prestador.NombreCompleto · @l.Planilla.Titulo línea @l.Numero</span><span class="tabular">@Formato.Clp(l.ValorTotalBruto)</span></div>
             }
             @if (Model.Diferidas.Count > 0)
             {

@@ -297,4 +297,61 @@ public class PlanillaYCuentasTests
         Assert.Contains("$180.000", c.Cuerpo);
         Assert.Contains("$152.550", c.Cuerpo);
     }
+
+    [Fact]
+    public async Task VariasPlanillasPorAreaEnElCiclo_CadaUnaConSuBoleta()
+    {
+        using var e = new Entorno();
+        var vale = e.Prestador("Valentina Muñoz Soto", "17.345.120-2", "Cuenta Corriente", "00012345678", "BANCO DE CHILE");
+        var tomas = e.Prestador("Tomás Herrera Lagos", "16.987.452-2", "Cuenta Vista", "1734567890", "BANCOESTADO");
+        var ciclo = await e.CicloAsync();
+        var area = await e.Db.Areas.FirstAsync(a => a.Nombre == "FACE TO FACE");
+        Task<ResultadoImportacion> Importar(Fila[] filas, int? reemplazar = null, bool nueva = false, string? nombre = null) =>
+            e.Produccion.ImportarAsync(new SolicitudImportacion(ciclo.Id, area.Id, "Costo Directo", "Andrés Paredes", "andres.paredes@ejemplo.cl",
+                TipoArchivoProduccion.Exportacion, "produccion.csv", Csv(filas), reemplazar, nueva, nombre));
+
+        var a = await Importar([new(vale, "260041200105", E, 6500, 10)], nombre: "Estudio Retail");
+        Assert.True(a.Cargada);
+        Assert.Equal((1, "FACE TO FACE · Estudio Retail"), (a.Planilla!.Numero, a.Planilla.Titulo));
+
+        var b = await Importar([new(vale, "260043100104", E, 7200, 5), new(tomas, "260043100104", E, 7200, 3)], nueva: true);
+        Assert.True(b.Cargada, string.Join(" ", b.Errores.Select(x => x.Motivo)));
+        Assert.Equal((2, "FACE TO FACE #2"), (b.Planilla!.Numero, b.Planilla.Titulo));
+        Assert.Equal(2, await e.Db.Planillas.CountAsync(p => p.CicloId == ciclo.Id && p.AreaId == area.Id));
+
+        // Con varias planillas en el área hay que indicar el destino; los nombres no se repiten.
+        var sinDestino = await Importar([new(vale, "260041200105", E, 6500, 1)]);
+        Assert.Contains(sinDestino.Errores, x => x.Motivo.Contains("indica cuál reemplazar"));
+        var nombreRepetido = await Importar([new(vale, "260041200105", E, 6500, 1)], nueva: true, nombre: "estudio retail");
+        Assert.Contains(nombreRepetido.Errores, x => x.Motivo.Contains("Ya existe la planilla"));
+
+        // Filas idénticas a otra planilla del área: se avisa posible duplicado.
+        var dup = await Importar([new(vale, "260041200105", E, 6500, 10)], nueva: true, nombre: "Copia");
+        Assert.True(dup.Cargada);
+        Assert.Contains(dup.Avisos, x => x.Contains("Posible duplicado") && x.Contains("Estudio Retail"));
+
+        // Reemplazar una planilla puntual: nueva versión de esa planilla, las otras no cambian.
+        var b2 = await Importar([new(vale, "260043100104", E, 7200, 6), new(tomas, "260043100104", E, 7200, 3)], reemplazar: b.Planilla.Id);
+        Assert.True(b2.Cargada);
+        Assert.Equal((b.Planilla.Id, 2), (b2.Planilla!.Id, b2.Planilla.Version));
+        Assert.Equal(1, (await e.RecargarAsync(a.Planilla)).Version);
+
+        // Una boleta por planilla: Valentina emite una para cada planilla; la misma boleta no sirve para las dos.
+        var pa = await e.RecargarAsync(a.Planilla);
+        var pb = await e.RecargarAsync(b.Planilla);
+        Assert.True((await e.SubirAsync(pa, vale, "501", 65000)).Conciliacion.Cuadra);
+        var reutilizada = await e.SubirAsync(pb, vale, "501", 43200);
+        Assert.Contains(reutilizada.Conciliacion.Problemas, x => x.Contains("ya se usó"));
+        Assert.True((await e.SubirAsync(pb, vale, "502", 43200)).Conciliacion.Cuadra);
+
+        // Diferir desde la planilla #2 va a la planilla equivalente (sin nombre) del ciclo siguiente.
+        pb = await e.RecargarAsync(b.Planilla);
+        await e.Planillas.DiferirAsync(pb, tomas.Id, "sin boleta");
+        await e.Db.SaveChangesAsync();
+        var siguiente = await e.Db.Ciclos.SingleAsync(c => c.Periodo == new DateOnly(2026, 11, 1));
+        var destino = await e.Db.Planillas.Include(p => p.Area).Include(p => p.Lineas).SingleAsync(p => p.CicloId == siguiente.Id);
+        Assert.Null(destino.Nombre);
+        Assert.Equal("FACE TO FACE", destino.Titulo);
+        Assert.Single(destino.Lineas, l => l.PrestadorId == tomas.Id);
+    }
 }

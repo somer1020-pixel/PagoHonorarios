@@ -127,7 +127,7 @@ public class ContextoLayout(AppDbContext db, CicloService ciclos, IHttpContextAc
             .Where(d => d.Planilla.CicloId == Ciclo.Id && d.Resultado == DevolucionResultado.Pendiente)
             .OrderBy(d => d.VenceEn).FirstOrDefaultAsync();
         DevolucionActiva = dev;
-        DevolucionArea = dev?.Planilla.Area.Nombre;
+        DevolucionArea = dev?.Planilla.Titulo;
         var lineas = await db.LineasPago.Where(l => l.Planilla.CicloId == Ciclo.Id && l.Estado != LineaEstado.Diferida)
             .Select(l => new { l.ResultadoCuenta, l.AlertaCuentaResuelta, l.PlanillaId, l.PrestadorId, l.Planilla.Estado }).ToListAsync();
         // Una alerta por prestador y planilla (R-24 se informa por prestador).

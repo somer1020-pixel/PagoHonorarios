@@ -46,8 +46,8 @@ public class PagoService(
         var filas = resumen.Where(r => r.Transferencia is null).Select(r => new FilaNomina(
             r.Prestador.RutPlanilla, r.Prestador.NombreCompleto, r.Cuenta!.Banco, bancos.GetValueOrDefault(r.Cuenta.Banco, ""),
             r.Cuenta.TipoCuenta, tipos.GetValueOrDefault(r.Cuenta.TipoCuenta, ""), r.Cuenta.Cuenta, r.Liquido, r.Boleta?.NumeroBoleta ?? "", r.Prestador.Email));
-        var nombre = $"Nomina honorarios {Formato.MesLargo(p.Ciclo.Periodo.Month)}_{p.Ciclo.Periodo.Year} - {p.Area.Nombre}.xlsx";
-        var bytes = ExcelPlanilla.Nomina(filas, $"Nómina {p.Area.Nombre} {p.Ciclo.Codigo}");
+        var nombre = $"Nomina honorarios {Formato.MesLargo(p.Ciclo.Periodo.Month)}_{p.Ciclo.Periodo.Year} - {p.Titulo}.xlsx";
+        var bytes = ExcelPlanilla.Nomina(filas, $"Nómina {p.Titulo} {p.Ciclo.Codigo}");
         db.PlanillaArchivos.Add(new PlanillaArchivo
         {
             PlanillaId = p.Id, Version = p.Version, Tipo = "Nomina", NombreArchivo = nombre, Ruta = archivos.Guardar($"nominas/{p.Ciclo.Codigo}", nombre, bytes)
@@ -150,7 +150,7 @@ public class PagoService(
             }
             foreach (var a in docs)
             {
-                var area = c.Planillas.First(p => p.Id == a.PlanillaId).Area.Nombre;
+                var area = c.Planillas.First(p => p.Id == a.PlanillaId).Titulo;
                 var carpeta = a.Tipo == "Nomina" ? "nominas" : "planillas";
                 Add($"{carpeta}/{area}/{a.Tipo}_v{a.Version}_{a.NombreArchivo}", a.Ruta);
             }

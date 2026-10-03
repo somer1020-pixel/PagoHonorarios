@@ -92,11 +92,11 @@ public class BoletaService(
         var conc = await ConciliarAsync(p, b);
 
         auditor.Registrar(nameof(BoletaHonorarios), prest.RutPlanilla, canal == BoletaCanal.Portal ? "Subir boleta (portal)" : "Cargar boleta en nombre del prestador",
-            $"N° {b.NumeroBoleta} · {Formato.Clp(b.MontoBruto)} · {p.Area.Nombre}" + (anterior is null ? "" : $" · reemplaza N° {anterior.NumeroBoleta}") +
+            $"N° {b.NumeroBoleta} · {Formato.Clp(b.MontoBruto)} · {p.Titulo}" + (anterior is null ? "" : $" · reemplaza N° {anterior.NumeroBoleta}") +
             (canal == BoletaCanal.Operaciones ? $" · motivo: {motivo}" : ""));
         if (canal == BoletaCanal.Operaciones)
             correos.Encolar(prest.Email, "Operaciones cargó tu boleta",
-                $"Hola {prest.NombreCompleto}: Operaciones cargó la boleta N° {b.NumeroBoleta} en tu nombre para la planilla {p.Area.Nombre} {p.Ciclo.Codigo}. Motivo: {motivo}.");
+                $"Hola {prest.NombreCompleto}: Operaciones cargó la boleta N° {b.NumeroBoleta} en tu nombre para la planilla {p.Titulo} {p.Ciclo.Codigo}. Motivo: {motivo}.");
         await db.SaveChangesAsync();
         return new(b, conc, lectura, p.Lineas.Where(l => l.PrestadorId == prestadorId && l.Estado != LineaEstado.Diferida).Sum(l => l.ValorTotalBruto));
     }
@@ -238,7 +238,7 @@ public class BoletaService(
         var par = await parametros.ObtenerAsync();
         foreach (var prest in pendientes)
             correos.Encolar(prest.Email, $"Recordatorio: sube tu boleta de {p.Ciclo.Codigo}",
-                $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Area.Nombre}. Plazo de emisión hasta el {Formato.Fecha(Conciliacion.FechaLimite(p.Ciclo.Periodo, par.DiaLimiteBoleta))}.");
+                $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Titulo}. Plazo de emisión hasta el {Formato.Fecha(Conciliacion.FechaLimite(p.Ciclo.Periodo, par.DiaLimiteBoleta))}.");
         auditor.Registrar(nameof(Planilla), p.Id, "Recordar a pendientes", $"{pendientes.Count} prestadores");
         await db.SaveChangesAsync();
         return pendientes.Count;

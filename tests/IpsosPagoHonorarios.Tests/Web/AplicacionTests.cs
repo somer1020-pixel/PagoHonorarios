@@ -334,7 +334,9 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.Equal(HttpStatusCode.OK, (await andres.GetAsync($"/Ciclos/Planilla?handler=Xlsx&id={f2f.Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await andres.GetAsync($"/Boletas/Seguimiento?handler=Pdf&boletaId={boletaDp.Id}")).StatusCode);
         Assert.DoesNotContain("DATA PROCESSING", await andres.GetStringAsync($"/Boletas/Seguimiento?planilla={dp.Id}"));
-        Assert.DoesNotContain("<option value=\"" + dp.AreaId + "\"", await andres.GetStringAsync("/Ciclos/Produccion"));
+        var prodAndres = await andres.GetStringAsync("/Ciclos/Produccion");
+        Assert.DoesNotContain(">DATA PROCESSING</option>", prodAndres);
+        Assert.DoesNotContain("Reemplazar DATA PROCESSING", prodAndres);
         Denegado(await andres.GetAsync($"/Ciclos/Historial?handler=Zip&cicloId={oct.Id}"));
 
         var felipe = Cliente();   // Operaciones · DATA PROCESSING y Operations CATI
@@ -383,7 +385,7 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         var abierto = System.Net.WebUtility.HtmlDecode(await c.GetStringAsync("/Ciclos/Produccion?ciclo=OCT-2026"));
         Assert.DoesNotContain("No se puede cargar producción", abierto);
         Assert.Contains("Finanzas la observó: las correcciones se hacen en Correcciones", abierto);   // FACE TO FACE v2 observada
-        Assert.Contains("data-motivo=\"FACE TO FACE v2: Finanzas la observó", abierto);
+        Assert.Contains("Reemplazar FACE TO FACE v2 — Finanzas la observó", abierto);   // opción deshabilitada con el motivo
     }
 
     [Fact]

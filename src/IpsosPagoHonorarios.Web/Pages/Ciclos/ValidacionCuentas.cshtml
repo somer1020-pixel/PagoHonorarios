@@ -21,7 +21,7 @@
 @using Microsoft.AspNetCore.Html
 <div class="encabezado">
     <div>
-        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Titulo} v{p.Version}")</div>
         <h1>Validación de cuentas</h1>
         <div class="rol">Rol: Operaciones · Finanzas</div>
     </div>
@@ -145,7 +145,7 @@ else
                         @if (alertas.Count == 0) { <span class="text-13 muted">Sin alertas abiertas.</span> }
                     </div></div>
                 <div><label class="form-label" for="sc-msg">Mensaje</label>
-                    <textarea id="sc-msg" name="mensaje" class="form-control" rows="3" required>Hola @p.ResponsableNombre.Split(' ')[0]: las filas @string.Join(", ", alertas.Select(a => a.Numero)) de la planilla @p.Area.Nombre v@(p.Version) tienen cuentas que no coinciden con las registradas. Por favor revisa el número de cuenta y sube la versión corregida.</textarea></div>
+                    <textarea id="sc-msg" name="mensaje" class="form-control" rows="3" required>Hola @p.ResponsableNombre.Split(' ')[0]: las filas @string.Join(", ", alertas.Select(a => a.Numero)) de la planilla @p.Titulo v@(p.Version) tienen cuentas que no coinciden con las registradas. Por favor revisa el número de cuenta y sube la versión corregida.</textarea></div>
                 <div class="fila"><button type="submit" class="btn btn-primary">Enviar solicitud</button><span class="text-12 muted">Queda registrada y se puede reenviar.</span></div>
             </fieldset>
             @if (Model.Solicitudes.Count > 0)

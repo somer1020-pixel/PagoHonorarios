@@ -12,7 +12,7 @@
         <div class="rol">Rol: Operaciones (Finanzas: lectura)</div>
     </div>
     @if (Model.CicloCerrado) { @Badge.Html(Tono.Neutral, $"Ciclo {Model.Ciclo!.Codigo} cerrado") }
-    else if (Model.Resumen is not null) { <span class="text-13 muted">@Model.Resumen.Area.Nombre v@(Model.Resumen.Version)</span> @Badge.De(Model.Resumen.Estado) }
+    else if (Model.Resumen is not null) { <span class="text-13 muted">@Model.Resumen.Titulo v@(Model.Resumen.Version)</span> @Badge.De(Model.Resumen.Estado) }
     else { @Badge.Html(Tono.Neutral, "Borrador") }
 </div>
 @if (Model.CicloCerrado)
@@ -65,11 +65,25 @@ else
                     <select id="p-area" name="AreaId" class="form-select" required>
                         @foreach (var a in Model.Areas)
                         {
-                            var pa = Model.Planillas.FirstOrDefault(x => x.AreaId == a.Id);
-                            <option value="@a.Id" selected="@(a.Id == Model.AreaId)" data-motivo="@(pa is null ? null : ProduccionModel.MotivoSinCarga(pa) is { } m ? $"{a.Nombre} v{pa.Version}: {m}" : null)">@a.Nombre</option>
+                            <option value="@a.Id" selected="@(a.Id == Model.AreaId)">@a.Nombre</option>
                         }
                     </select>
-                    <div id="p-area-motivo" class="aviso aviso-warning text-12 mt-2" hidden></div>
+                </div>
+                <div>
+                    <label class="form-label" for="p-dest">Planilla</label>
+                    <select id="p-dest" name="Destino" class="form-select" required>
+                        <option value="" data-placeholder>Elige: nueva o reemplazar…</option>
+                        <option value="nueva" selected="@(Model.Destino == "nueva")">Nueva planilla del área</option>
+                        @foreach (var pl in Model.Planillas)
+                        {
+                            var m = ProduccionModel.MotivoSinCarga(pl);
+                            <option value="@pl.Id" data-area="@pl.AreaId" disabled="@(m is not null)" selected="@(Model.Destino == pl.Id.ToString())">Reemplazar @pl.Titulo v@(pl.Version)@(m is null ? "" : $" — {m}")</option>
+                        }
+                    </select>
+                </div>
+                <div id="p-nombre-wrap">
+                    <label class="form-label" for="p-nombre">Nombre de la planilla (opcional)</label>
+                    <input id="p-nombre" name="NombrePlanilla" class="form-control" maxlength="100" value="@Model.NombrePlanilla" placeholder="Ej.: Estudio Retail" />
                 </div>
                 <div>
                     <label class="form-label" for="p-tg">Tipo de gasto</label>
@@ -134,12 +148,12 @@ else
             <div class="tarjeta compacta">
                 <h2>Planillas del ciclo</h2>
                 <table class="table table-ajustada m-0">
-                    <thead><tr><th>Planilla</th><th>Estado</th><th>¿Admite nueva carga?</th></tr></thead>
+                    <thead><tr><th>Planilla</th><th>Estado</th><th>¿Se puede reemplazar?</th></tr></thead>
                     <tbody>
                     @foreach (var p in Model.Planillas)
                     {
                         <tr class="@(p.Id == Model.Resumen?.Id ? "sel" : null)">
-                            <td><a href="?planilla=@p.Id">@p.Area.Nombre v@(p.Version)</a></td>
+                            <td><a href="?planilla=@p.Id">@p.Titulo v@(p.Version)</a></td>
                             <td>@Badge.De(p.Estado)</td>
                             <td class="text-12">@(Model.CicloCerrado ? "No: el ciclo está cerrado." : ProduccionModel.Situacion(p))
                                 @if (!Model.CicloCerrado && p.Estado == PlanillaEstado.Observada) { <a href="/Ciclos/Correcciones?planilla=@p.Id">Ir a Correcciones</a> }</td>
@@ -155,7 +169,7 @@ else
 {
     var grupos = res.Activas().GroupBy(l => (l.Job.JobBookNumber, l.Glosa.NombreGlosa)).ToList();
     <div class="tarjeta compacta">
-        <div class="d-flex align-items-center gap-2 flex-wrap"><h2 class="flex-fill">Resumen por Job y glosa · @res.Area.Nombre v@(res.Version) (recibida @Formato.Fecha(res.FechaRecepcion))</h2><a href="/Ciclos/Planilla?id=@res.Id">Ver planilla</a></div>
+        <div class="d-flex align-items-center gap-2 flex-wrap"><h2 class="flex-fill">Resumen por Job y glosa · @res.Titulo v@(res.Version) (recibida @Formato.Fecha(res.FechaRecepcion))</h2><a href="/Ciclos/Planilla?id=@res.Id">Ver planilla</a></div>
         <div class="table-responsive">
             <table class="table">
                 <thead><tr><th>Job</th><th>Nombre</th><th>Glosa</th><th>Item</th><th class="num">Líneas</th><th class="num">Cantidad</th><th class="num">Monto</th></tr></thead>
@@ -174,11 +188,27 @@ else
     </div>
 }
 <script>
-    // Aviso inmediato si el área elegida ya tiene una planilla que no admite una nueva carga.
+    // Planilla de destino según el área: si el área no tiene planillas en el ciclo es nueva; si tiene, hay que elegir
+    // entre una nueva o reemplazar una existente (evita duplicar una planilla por error).
     (() => {
-        const sel = document.getElementById('p-area'), aviso = document.getElementById('p-area-motivo');
-        if (!sel) return;
-        const ver = () => { const m = sel.selectedOptions[0]?.dataset.motivo; aviso.textContent = m || ''; aviso.hidden = !m; };
-        sel.addEventListener('change', ver); ver();
+        const area = document.getElementById('p-area'), dest = document.getElementById('p-dest'), nombre = document.getElementById('p-nombre-wrap');
+        if (!area || !dest) return;
+        const ver = (cambioArea) => {
+            let existentes = 0;
+            dest.querySelectorAll('option[data-area]').forEach(o => {
+                const propia = o.dataset.area === area.value;
+                o.hidden = !propia;
+                if (propia) existentes++;
+                if (!propia && o.selected) o.selected = false;
+            });
+            const ph = dest.querySelector('[data-placeholder]');
+            ph.hidden = existentes === 0;
+            if (existentes === 0) dest.value = 'nueva';
+            else if (cambioArea) dest.value = '';
+            nombre.hidden = dest.value !== 'nueva';
+        };
+        area.addEventListener('change', () => ver(true));
+        dest.addEventListener('change', () => ver(false));
+        ver(false);
     })();
 </script>

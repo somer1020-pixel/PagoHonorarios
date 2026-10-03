@@ -4,7 +4,7 @@
     <div role="tablist" class="seg" aria-label="Planillas por área">
         @foreach (var p in Model.Planillas)
         {
-            <a role="tab" href="?@Model.Parametro=@p.Id" aria-selected="@(p.Id == Model.Seleccionada ? "true" : "false")">@p.Area.Nombre</a>
+            <a role="tab" href="?@Model.Parametro=@p.Id" aria-selected="@(p.Id == Model.Seleccionada ? "true" : "false")">@p.Titulo</a>
         }
     </div>
 }

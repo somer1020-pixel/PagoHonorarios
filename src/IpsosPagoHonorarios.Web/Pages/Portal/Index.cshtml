@@ -36,7 +36,7 @@
     var glosas = x.Lineas.Select(l => l.Glosa.NombreGlosa).Distinct();
     var jobs = x.Lineas.Select(l => l.Job.JobBookNumber).Distinct();
     <section class="tarjeta">
-        <span class="kicker">Boleta por emitir · @p.Area.Nombre · @p.Ciclo.Codigo</span>
+        <span class="kicker">Boleta por emitir · @p.Titulo · @p.Ciclo.Codigo</span>
         <div class="text-13 d-flex flex-column gap-1">
             @foreach (var l in x.Lineas)
             {

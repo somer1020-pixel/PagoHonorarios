@@ -24,7 +24,7 @@ public class CorreccionesModel(
     {
         await ctx.CargarAsync();
         if (ctx.Ciclo is null) return;
-        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
+        Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
         var conObs = await db.Observaciones.Where(o => o.LineaPago.Planilla.CicloId == ctx.Ciclo.Id).Select(o => o.LineaPago.PlanillaId).Distinct().ToListAsync();
         var id = Planilla ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.Observada)?.Id ?? Planillas.FirstOrDefault(p => conObs.Contains(p.Id))?.Id ?? Planillas.FirstOrDefault()?.Id;
         if (id is null) return;

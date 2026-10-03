@@ -1087,6 +1087,51 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261003224846_VariasPlanillasPorArea'
+)
+BEGIN
+    DROP INDEX [IX_Planillas_CicloId_AreaId] ON [Planillas];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261003224846_VariasPlanillasPorArea'
+)
+BEGIN
+    ALTER TABLE [Planillas] ADD [Nombre] nvarchar(100) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261003224846_VariasPlanillasPorArea'
+)
+BEGIN
+    ALTER TABLE [Planillas] ADD [Numero] int NOT NULL DEFAULT 1;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261003224846_VariasPlanillasPorArea'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Planillas_CicloId_AreaId_Numero] ON [Planillas] ([CicloId], [AreaId], [Numero]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261003224846_VariasPlanillasPorArea'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261003224846_VariasPlanillasPorArea', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
 /* ---------- Datos iniciales ---------- */
 SET NOCOUNT ON;
 

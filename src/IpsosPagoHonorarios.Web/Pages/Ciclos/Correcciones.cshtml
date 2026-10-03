@@ -8,7 +8,7 @@
 }
 <div class="encabezado">
     <div>
-        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Area.Nombre} v{p.Version}")</div>
+        <div class="ruta">Ciclo de pago / @(p?.Ciclo.Codigo ?? "—") / @(p is null ? "—" : $"{p.Titulo} v{p.Version}")</div>
         <h1>Correcciones</h1>
         <div class="rol">Rol: Operaciones corrige · Finanzas acepta o reabre</div>
     </div>
@@ -98,7 +98,7 @@ else
                 }
                 @if (o.Estado == ObservacionEstado.Vencida || l.Estado == LineaEstado.Diferida)
                 {
-                    <div class="text-13" style="color:var(--danger)">Filas diferidas a la planilla @p.Area.Nombre de @Model.CicloSiguiente.</div>
+                    <div class="text-13" style="color:var(--danger)">Filas diferidas a la planilla @p.Titulo de @Model.CicloSiguiente.</div>
                 }
                 @if (o.Respuesta is not null)
                 {

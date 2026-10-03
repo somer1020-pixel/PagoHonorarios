@@ -36,7 +36,7 @@ else
     {
         <div class="alerta-plazo vencido" role="status">
             <span class="tag tag-solido-danger">Plazo vencido</span>
-            <div class="flex-fill text-13">Las filas con observaciones abiertas de @v.Planilla.Area.Nombre pasaron a Diferida (ciclo siguiente).</div>
+            <div class="flex-fill text-13">Las filas con observaciones abiertas de @v.Planilla.Titulo pasaron a Diferida (ciclo siguiente).</div>
             <a class="btn btn-secondary" href="/Ciclos/Correcciones?planilla=@v.PlanillaId">Ver correcciones</a>
         </div>
     }
@@ -70,7 +70,7 @@ else
             var (r, e) = Model.BoletasDe(p);
             var (_, url) = IndexModel.Accion(p);
             <a href="@url" class="tarjeta compacta text-decoration-none" style="color:inherit;min-height:44px">
-                <div class="d-flex justify-content-between gap-2"><strong>@p.Area.Nombre v@(p.Version)</strong>@Badge.De(p.Estado)</div>
+                <div class="d-flex justify-content-between gap-2"><strong>@p.Titulo v@(p.Version)</strong>@Badge.De(p.Estado)</div>
                 <span class="text-13 tabular">@p.Activas().Count() líneas · @Formato.Clp(p.Activas().Sum(l => l.ValorTotalBruto)) · boletas @r/@e</span>
             </a>
         }
@@ -86,7 +86,7 @@ else
                     var (r, e) = Model.BoletasDe(p);
                     var (txt, url) = IndexModel.Accion(p);
                     <tr>
-                        <td><strong>@p.Area.Nombre</strong></td>
+                        <td><strong>@p.Titulo</strong></td>
                         <td class="mono text-12">v@(p.Version)</td>
                         <td>@p.ResponsableNombre</td>
                         <td class="num">@p.Activas().Count()</td>
