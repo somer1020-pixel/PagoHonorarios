@@ -13,6 +13,7 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
     public List<Area> Areas { get; set; } = [];
     public List<string> TiposGasto { get; set; } = [];
     public string? AvisoVentana { get; set; }
+    public string Ventana { get; set; } = "";
     public ResultadoImportacion? Resultado { get; set; }
     public Planilla? Resumen { get; set; }
     public List<Planilla> Planillas { get; set; } = [];
@@ -55,6 +56,7 @@ public class ProduccionModel(AppDbContext db, ContextoLayout ctx, ProduccionServ
         TiposGasto = await db.TiposGasto.OrderBy(t => t.Id).Select(t => t.Nombre).ToListAsync();
         var par = await parametros.ObtenerAsync();
         AvisoVentana = ProduccionReglas.AvisoVentana(ciclos.Hoy, par.DiaDescargaDesde, par.DiaDescargaHasta);
+        Ventana = $"días {par.DiaDescargaDesde} a {par.DiaDescargaHasta}";
         if (Ciclo is null) return;
         Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
         if (CicloCerrado)

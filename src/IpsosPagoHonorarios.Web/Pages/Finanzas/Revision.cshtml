@@ -126,7 +126,7 @@ else
     <div class="d-flex justify-content-end gap-3 align-items-center flex-wrap">
         <span class="text-13 muted">@(Model.Aprobacion is { Ok: false } a && enRevision ? string.Join(" ", a.Motivos) : "Aprobar requiere 0 observaciones abiertas, cuentas validadas y boletas cuadradas.")</span>
         <form method="post" asp-page-handler="Devolver" asp-route-planilla="@p.Id" class="m-0">
-            <button class="btn btn-advertencia" disabled="@(!enRevision || abiertas == 0)">Devolver planilla (plazo 1 hora)</button></form>
+            <button class="btn btn-advertencia" disabled="@(!enRevision || abiertas == 0)">Devolver planilla (plazo @Model.PlazoCorreccion)</button></form>
         <form method="post" asp-page-handler="Aprobar" asp-route-planilla="@p.Id" class="m-0">
             <button class="btn btn-primary" disabled="@(Model.Aprobacion?.Ok != true)">Aprobar planilla</button></form>
     </div>

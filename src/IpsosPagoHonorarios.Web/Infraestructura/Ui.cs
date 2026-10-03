@@ -154,10 +154,11 @@ public abstract class PaginaBase : PageModel
     protected async Task<IActionResult> AccionAsync(Func<Task> accion, string ok, object? rutaValores = null, string[]? roles = null)
     {
         if (roles is not null && !Puede(roles)) return Forbid();
+        var previo = MensajeOk;
         try
         {
             await accion();
-            MensajeOk = ok;
+            if (MensajeOk == previo) MensajeOk = ok;   // la acción puede dejar un mensaje más preciso
         }
         catch (ReglaException ex)
         {

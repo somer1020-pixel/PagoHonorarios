@@ -39,7 +39,7 @@
 }
 else
 {
-    <div class="aviso aviso-info">Hoy @Formato.Fecha(DateOnly.FromDateTime(Formato.ALocal(DateTime.UtcNow))) · dentro de la ventana de descarga (días 28 a 30). Fuera de ella se puede cargar, con aviso.</div>
+    <div class="aviso aviso-info">Hoy @Formato.Fecha(DateOnly.FromDateTime(Formato.ALocal(DateTime.UtcNow))) · dentro de la ventana de descarga (@Model.Ventana). Fuera de ella se puede cargar, con aviso.</div>
 }
 <div class="grid-5-6">
     <form method="post" enctype="multipart/form-data" class="tarjeta">

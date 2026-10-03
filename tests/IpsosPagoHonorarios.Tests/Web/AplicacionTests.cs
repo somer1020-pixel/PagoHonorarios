@@ -385,4 +385,46 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         Assert.Contains("Finanzas la observó: las correcciones se hacen en Correcciones", abierto);   // FACE TO FACE v2 observada
         Assert.Contains("data-motivo=\"FACE TO FACE v2: Finanzas la observó", abierto);
     }
+
+    [Fact]
+    public async Task Parametros_SoloAdministrador_EditaYAudita()
+    {
+        var fin = Cliente();
+        await IngresarAsync(fin, "carolina.diaz@ejemplo.cl");
+        Denegado(await fin.GetAsync("/Maestros/Parametros"));
+
+        var adm = Cliente();
+        await IngresarAsync(adm, "admin@ejemplo.cl");
+        Assert.Contains("Ventana de descarga", await adm.GetStringAsync("/Maestros/Parametros"));
+        async Task<string> Post(string handler, Dictionary<string, string> datos)
+        {
+            datos["__RequestVerificationToken"] = await TokenAsync(adm, "/Maestros/Parametros");
+            var r = await adm.PostAsync($"/Maestros/Parametros?handler={handler}", new FormUrlEncodedContent(datos));
+            Assert.Equal(HttpStatusCode.Redirect, r.StatusCode);
+            return System.Net.WebUtility.HtmlDecode(await adm.GetStringAsync("/Maestros/Parametros"));
+        }
+        Dictionary<string, string> Form(int desde, int hasta, int limite, int plazo, string rut = "76.007.075-0") => new()
+        {
+            ["diaDescargaDesde"] = desde.ToString(), ["diaDescargaHasta"] = hasta.ToString(), ["diaLimiteBoleta"] = limite.ToString(), ["diaPago"] = "5",
+            ["plazoCorreccionMinutos"] = plazo.ToString(), ["rutEmpresa"] = rut, ["razonSocialEmpresa"] = "IPSOS OBSERVER (CHILE) S.A."
+        };
+
+        Assert.Contains("La ventana de descarga", await Post("Guardar", Form(30, 28, 10, 60)));
+        Assert.Contains("RUT de la empresa inválido", await Post("Guardar", Form(28, 30, 10, 60, "76.007.075-9")));
+        var ok = await Post("Guardar", Form(25, 30, 12, 120));
+        Assert.Contains("Día límite boleta: 10 → 12", ok);
+        Assert.Contains("Actual: 2 horas", ok);
+        Assert.Contains("días 25 a 30", await adm.GetStringAsync("/Ciclos/Produccion"));
+        Assert.Contains("Tasa de retención 2027: 13 %", await Post("Tasa", new() { ["anio"] = "2027", ["tasa"] = "13" }));
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var sp = scope.ServiceProvider;
+            var par = await sp.GetRequiredService<Parametros>().ObtenerAsync();
+            Assert.Equal((25, 12, 120), (par.DiaDescargaDesde, par.DiaLimiteBoleta, par.PlazoCorreccionMinutos));
+            Assert.Equal(0.13m, await sp.GetRequiredService<Parametros>().TasaAsync(2027));
+            Assert.Contains(await sp.GetRequiredService<AppDbContext>().Auditorias.ToListAsync(), a => a.Accion == "Editar parámetros" && a.Detalle!.Contains("Plazo de corrección (min): 60 → 120"));
+        }
+        await Post("Guardar", Form(28, 30, 10, 60));   // deja los valores originales para las demás pruebas
+    }
 }

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace IpsosPagoHonorarios.Web.Pages.Finanzas;
 
 [Authorize(Roles = $"{Roles.Finanzas},{Roles.Admin}")]
-public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos, RevisionService revision, CuentasService cuentas, ExcelPlanilla excel, Almacenamiento almacen) : PaginaBase
+public class RevisionModel(Parametros parametros, AppDbContext db, ContextoLayout ctx, CicloService ciclos, RevisionService revision, CuentasService cuentas, ExcelPlanilla excel, Almacenamiento almacen) : PaginaBase
 {
     [BindProperty(SupportsGet = true)] public int? Planilla { get; set; }
     [BindProperty(SupportsGet = true)] public int? Prestador { get; set; }
@@ -19,6 +19,7 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
     public List<Observacion> Observaciones { get; set; } = [];
     public Verificacion? Aprobacion { get; set; }
     public ChequeosPrestador? Sel { get; set; }
+    public string PlazoCorreccion { get; set; } = "";
     /// <summary>XLSX enviado a Finanzas (última versión archivada) y archivo original subido por Operaciones.</summary>
     public PlanillaArchivo? Enviada { get; set; }
     public PlanillaArchivo? Original { get; set; }
@@ -26,6 +27,7 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
     public async Task OnGetAsync()
     {
         await ctx.CargarAsync();
+        PlazoCorreccion = Formato.Plazo((await parametros.ObtenerAsync()).PlazoCorreccionMinutos);
         if (ctx.Ciclo is null) return;
         Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == ctx.Ciclo.Id).OrderBy(p => p.Area.Nombre).ToListAsync();
         var id = Planilla ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.EnRevision)?.Id ?? Planillas.FirstOrDefault(p => p.Estado == PlanillaEstado.Observada)?.Id ?? Planillas.FirstOrDefault()?.Id;
@@ -81,7 +83,11 @@ public class RevisionModel(AppDbContext db, ContextoLayout ctx, CicloService cic
         AccionAsync(() => revision.ObservarAsync(lineaId, tipo, campo, detalle), "Observación agregada.", Ruta);
 
     public Task<IActionResult> OnPostDevolverAsync() =>
-        AccionAsync(() => revision.DevolverAsync(Planilla ?? 0), "Planilla devuelta: Operaciones tiene 1 hora para corregir.", Ruta);
+        AccionAsync(async () =>
+        {
+            var d = await revision.DevolverAsync(Planilla ?? 0);
+            MensajeOk = $"Planilla devuelta: Operaciones tiene hasta las {Formato.Hora(d.VenceEn)} para corregir.";
+        }, "Planilla devuelta.", Ruta);
 
     public Task<IActionResult> OnPostAprobarAsync() =>
         AccionAsync(() => revision.AprobarAsync(Planilla ?? 0), "Planilla aprobada: quedó congelada y las boletas confirmadas.", Ruta);

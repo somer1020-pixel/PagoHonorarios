@@ -58,6 +58,14 @@ public static class Formato
     public static string MesLargo(int mes) => Meses[mes - 1];
 
     /// <summary>OCT-2026.</summary>
+    /// <summary>Plazo legible: 60 → "1 hora", 90 → "1 h 30 min", 45 → "45 minutos".</summary>
+    public static string Plazo(int minutos) => minutos switch
+    {
+        < 60 => $"{minutos} minutos",
+        _ when minutos % 60 == 0 => minutos == 60 ? "1 hora" : $"{minutos / 60} horas",
+        _ => $"{minutos / 60} h {minutos % 60} min"
+    };
+
     public static string CodigoCiclo(DateOnly periodo) => $"{MesesCortos[periodo.Month - 1]}-{periodo.Year}";
 
     /// <summary>Planilla honorarios OCTUBRE_2026 - FACE TO FACE v2.xlsx</summary>

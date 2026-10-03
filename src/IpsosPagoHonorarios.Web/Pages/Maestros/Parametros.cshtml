@@ -1,0 +1,62 @@
+@page
+@model IpsosPagoHonorarios.Web.Pages.Maestros.ParametrosModel
+@{
+    ViewData["Title"] = "Parámetros";
+    ViewData["Activo"] = "parametros";
+    var p = Model.P;
+    var ejemplo = Model.Abiertos.FirstOrDefault()?.Periodo ?? new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1);
+}
+<div class="encabezado">
+    <div>
+        <div class="ruta">Maestros / Parámetros del ciclo</div>
+        <h1>Parámetros</h1>
+        <div class="rol">Rol: Administrador</div>
+    </div>
+</div>
+<p class="m-0 text-13 muted">Los ciclos son mensuales (un ciclo por mes calendario). Aquí se configuran los días y plazos dentro de cada ciclo. Cada cambio queda en la bitácora.</p>
+<div class="grid-7-4">
+    <form method="post" asp-page-handler="Guardar" class="tarjeta">
+        <h2>Ciclo de pago</h2>
+        <div class="campos-2">
+            <div><label class="form-label" for="dd">Ventana de descarga: desde el día</label><input id="dd" name="diaDescargaDesde" type="number" min="1" max="31" class="form-control" value="@p.DiaDescargaDesde" required /></div>
+            <div><label class="form-label" for="dh">hasta el día</label><input id="dh" name="diaDescargaHasta" type="number" min="1" max="31" class="form-control" value="@p.DiaDescargaHasta" required /></div>
+        </div>
+        <p class="m-0 text-12 muted">Días del mes para cargar la producción. Fuera de la ventana se puede cargar igual, con aviso.</p>
+        <div class="campos-2">
+            <div><label class="form-label" for="dl">Día límite de la boleta (mes siguiente)</label><input id="dl" name="diaLimiteBoleta" type="number" min="1" max="28" class="form-control" value="@p.DiaLimiteBoleta" required />
+                <span class="text-12 muted">Ej.: ciclo @Formato.CodigoCiclo(ejemplo): boletas emitidas del @Formato.Fecha(ejemplo) al @Formato.Fecha(Conciliacion.FechaLimite(ejemplo, p.DiaLimiteBoleta)). Después, solo con autorización del Administrador.</span></div>
+            <div><label class="form-label" for="dp">Día de pago (mes siguiente)</label><input id="dp" name="diaPago" type="number" min="1" max="28" class="form-control" value="@p.DiaPago" required />
+                <label class="d-flex gap-2 align-items-center text-12 mt-1"><input type="checkbox" name="aplicarPagoAbiertos" value="true" /> Aplicar también a los ciclos abiertos (@(Model.Abiertos.Count == 0 ? "ninguno" : string.Join(", ", Model.Abiertos.Select(c => $"{c.Codigo}: {Formato.Fecha(c.FechaPagoProgramada)}"))))</label>
+                <span class="text-12 muted">Sin marcar, el nuevo día aplica a los ciclos que se creen desde ahora.</span></div>
+        </div>
+        <div class="campos-2">
+            <div><label class="form-label" for="pc">Plazo de corrección tras devolución (minutos)</label><input id="pc" name="plazoCorreccionMinutos" type="number" min="15" max="2880" step="5" class="form-control" value="@p.PlazoCorreccionMinutos" required />
+                <span class="text-12 muted">Actual: @Formato.Plazo(p.PlazoCorreccionMinutos). Lo no corregido en el plazo pasa al ciclo siguiente. Aplica a las próximas devoluciones.</span></div>
+        </div>
+        <h2 class="mt-2">Empresa receptora de las boletas</h2>
+        <div class="campos-2">
+            <div><label class="form-label" for="re">RUT</label><input id="re" name="rutEmpresa" class="form-control mono" value="@RutHelper.Formatear(p.RutEmpresa)" required /></div>
+            <div><label class="form-label" for="rs">Razón social</label><input id="rs" name="razonSocialEmpresa" class="form-control" value="@p.RazonSocialEmpresa" required /></div>
+        </div>
+        <p class="m-0 text-12 muted">Las boletas deben venir emitidas a este RUT.</p>
+        <button class="btn btn-primary align-self-start">Guardar parámetros</button>
+    </form>
+    <div class="tarjeta">
+        <h2>Tasa de retención por año</h2>
+        <table class="table table-ajustada m-0">
+            <thead><tr><th>Año</th><th class="num">Tasa</th></tr></thead>
+            <tbody>
+            @foreach (var t in Model.Tasas)
+            {
+                <tr><td class="tabular">@t.Anio</td><td class="num">@Formato.Porcentaje(t.Tasa)</td></tr>
+            }
+            </tbody>
+        </table>
+        <form method="post" asp-page-handler="Tasa" class="d-flex flex-wrap gap-2 align-items-end">
+            <div><label class="form-label" for="ta">Año</label><input id="ta" name="anio" type="number" min="2000" max="2100" class="form-control form-control-sm" style="width:100px" value="@(Model.Tasas.FirstOrDefault()?.Anio + 1 ?? DateTime.Today.Year)" required /></div>
+            <div><label class="form-label" for="tt">Tasa (%)</label><input id="tt" name="tasa" class="form-control form-control-sm" style="width:100px" placeholder="15,25" inputmode="decimal" required /></div>
+            <button class="btn btn-secondary btn-sm">Guardar tasa</button>
+        </form>
+        <span class="text-12 muted">Si el año ya existe, se reemplaza. Un año sin tasa usa la del último año anterior configurado. Cambiar la tasa de un año en curso afecta los cálculos de las boletas que se concilien desde ahora.</span>
+    </div>
+</div>
