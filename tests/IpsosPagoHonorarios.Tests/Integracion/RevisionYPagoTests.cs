@@ -342,5 +342,23 @@ public class RevisionYPagoTests
         var acciones = (await f.E.Db.Auditorias.Select(a => a.Accion).ToListAsync()).ToHashSet();
         Assert.Superset(new HashSet<string> { "Importar producción", "Validar cuentas", "Subir boleta (portal)", "Cargar boleta en nombre del prestador",
             "Enviar a Finanzas", "Validar cuenta", "Aprobar planilla", "Generar nómina", "Registrar transferencia", "Cerrar ciclo" }, acciones);
+
+        // Reapertura excepcional: solo el Administrador y con motivo.
+        System.Security.Claims.ClaimsPrincipal Como(string rol) => new(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, rol)], "test"));
+        f.E.Usuario.Principal = Como(Roles.Finanzas);
+        Assert.Contains("Solo el Administrador", (await Assert.ThrowsAsync<ReglaException>(() => f.E.Pagos.ReabrirCicloAsync(ciclo.Id, "Corrección de un pago mal registrado"))).Message);
+        f.E.Usuario.Principal = Como(Roles.Admin);
+        Assert.Contains("motivo es obligatorio", (await Assert.ThrowsAsync<ReglaException>(() => f.E.Pagos.ReabrirCicloAsync(ciclo.Id, "  corto "))).Message);
+        await f.E.Pagos.ReabrirCicloAsync(ciclo.Id, "Corrección de un pago mal registrado");
+        Assert.Equal(CicloEstado.Abierto, ciclo.Estado);
+        Assert.Null(ciclo.CerradoEn);
+        Assert.Equal(PlanillaEstado.EnPago, (await f.E.RecargarAsync(f.P)).Estado);
+        Assert.Contains(await f.E.Db.Auditorias.ToListAsync(), a => a.Accion == "Reabrir ciclo" && a.Detalle!.Contains("motivo: Corrección de un pago mal registrado"));
+        await Assert.ThrowsAsync<ReglaException>(() => f.E.Pagos.ReabrirCicloAsync(ciclo.Id, "Corrección de un pago mal registrado"));   // ya abierto
+        f.E.Usuario.Principal = null;
+        await f.E.Pagos.CerrarCicloAsync(f.P.CicloId);   // se puede volver a cerrar
+        Assert.Equal(CicloEstado.Cerrado, ciclo.Estado);
+        Assert.Equal(PlanillaEstado.Cerrada, (await f.E.RecargarAsync(f.P)).Estado);
     }
 }

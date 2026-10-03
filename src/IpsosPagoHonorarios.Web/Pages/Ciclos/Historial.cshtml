@@ -19,14 +19,38 @@
         {
             <tr>
                 <td class="mono text-12"><a href="/Ciclos/Seleccionar?codigo=@f.Ciclo.Codigo&volver=/">@f.Ciclo.Codigo</a></td>
-                <td>@Badge.De(f.Ciclo.Estado)</td>
+                <td>@Badge.De(f.Ciclo.Estado)
+                    @foreach (var r in Model.Reaperturas[f.Ciclo.Codigo].Take(1))
+                    {
+                        <div class="text-12 muted" title="@r.Detalle">Reabierto el @Formato.FechaHora(r.Fecha) por @r.Usuario</div>
+                    }
+                </td>
                 <td class="num">@f.Planillas</td>
                 <td class="num">@f.Prestadores</td>
                 <td class="num">@Formato.Clp(f.Monto)</td>
                 <td class="tabular">@(f.Ciclo.Estado == CicloEstado.Cerrado || f.UltimoPago is not null ? Formato.Fecha(f.UltimoPago) : "Programado " + Formato.Fecha(f.Ciclo.FechaPagoProgramada))</td>
                 <td>@if (f.Ciclo.RutaZip is not null && Model.PuedeZip) { <a class="btn btn-ghost btn-sm" href="?handler=Zip&cicloId=@f.Ciclo.Id"><i class="bi bi-file-earmark-zip" aria-hidden="true"></i> Descargar ZIP</a> }
-                    else { <span class="muted">Al cerrar</span> }</td>
+                    else { <span class="muted">Al cerrar</span> }
+                    @if (Model.EsAdmin && f.Ciclo.Estado == CicloEstado.Cerrado)
+                    {
+                        <button type="button" class="btn btn-ghost btn-sm" data-bs-toggle="collapse" data-bs-target="#reabrir-@f.Ciclo.Id">Reabrir</button>
+                    }</td>
             </tr>
+            @if (Model.EsAdmin && f.Ciclo.Estado == CicloEstado.Cerrado)
+            {
+                <tr class="collapse" id="reabrir-@f.Ciclo.Id">
+                    <td colspan="7">
+                        <form method="post" asp-page-handler="Reabrir" class="aviso aviso-warning d-flex flex-column gap-2 m-0">
+                            <input type="hidden" name="cicloId" value="@f.Ciclo.Id" />
+                            <strong>Reabrir @f.Ciclo.Codigo (Administrador)</strong>
+                            <span class="text-12">El ciclo vuelve a estar abierto y sus planillas pasan a En pago. Úsalo solo si es necesario: queda en la bitácora con tu nombre y el motivo. El ZIP actual se conserva; al volver a cerrar se genera uno nuevo.</span>
+                            <label class="form-label m-0" for="rm-@f.Ciclo.Id">Motivo de la reapertura (obligatorio)</label>
+                            <textarea id="rm-@f.Ciclo.Id" name="motivo" class="form-control" rows="2" minlength="10" required></textarea>
+                            <button class="btn btn-primary btn-sm align-self-start">Reabrir ciclo</button>
+                        </form>
+                    </td>
+                </tr>
+            }
         }
         @if (Model.Filas.Count == 0) { <tr><td colspan="7" class="muted">Sin ciclos.</td></tr> }
         </tbody>

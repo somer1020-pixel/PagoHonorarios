@@ -103,6 +103,28 @@ public class PagoService(
 
     private static string ExtensionDe(string ruta) => Path.GetExtension(ruta) is { Length: > 0 } e ? e.ToLowerInvariant() : ".pdf";
 
+    /// <summary>
+    /// Reapertura excepcional de un ciclo cerrado: solo el Administrador y con motivo. Las planillas vuelven a En pago
+    /// (o Aprobada si no tienen líneas pagadas). El ZIP anterior se conserva; al volver a cerrar se genera uno nuevo.
+    /// </summary>
+    public async Task ReabrirCicloAsync(int cicloId, string? motivo)
+    {
+        if (usuario.Principal is { } pr && !pr.IsInRole(Roles.Admin)) throw new ReglaException("Solo el Administrador puede reabrir un ciclo.");
+        motivo = motivo?.Trim();
+        if (string.IsNullOrEmpty(motivo) || motivo.Length < 10) throw new ReglaException("Justifica la reapertura: el motivo es obligatorio (mínimo 10 caracteres).");
+        var c = await db.Ciclos.IgnoreQueryFilters().Include(x => x.Planillas).ThenInclude(p => p.Lineas).AsSplitQuery()
+                    .FirstOrDefaultAsync(x => x.Id == cicloId) ?? throw new ReglaException("Ciclo no encontrado.");
+        if (c.Estado != CicloEstado.Cerrado) throw new ReglaException($"El ciclo {c.Codigo} no está cerrado.");
+        foreach (var p in c.Planillas.Where(p => p.Estado == PlanillaEstado.Cerrada))
+            p.Estado = p.Lineas.Any(l => l.Estado == LineaEstado.Pagada) ? PlanillaEstado.EnPago : PlanillaEstado.Aprobada;
+        var cierre = $"cerrado el {Formato.FechaHora(c.CerradoEn)} por {c.CerradoPor ?? "—"}";
+        c.Estado = CicloEstado.Abierto;
+        c.CerradoEn = null;
+        c.CerradoPor = null;
+        auditor.Registrar(nameof(Ciclo), c.Codigo, "Reabrir ciclo", $"{cierre} · motivo: {motivo}");
+        await db.SaveChangesAsync();
+    }
+
     /// <summary>R-15: cierre con todas las líneas pagadas o diferidas; ZIP con planillas, boletas, nóminas, comprobantes y bitácora.</summary>
     public async Task CerrarCicloAsync(int cicloId)
     {

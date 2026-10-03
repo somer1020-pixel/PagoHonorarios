@@ -23,6 +23,10 @@
             @if (Model.CicloAbierto is { } ab) { <text>Cambia al ciclo abierto <strong>@ab.Codigo</strong> para cargar.</text> }
             else if (Model.SiguienteCodigo is not null) { <text>No hay ciclos abiertos: abre <strong>@Model.SiguienteCodigo</strong> para cargar la producción.</text> }
         </span>
+        @if (User.IsInRole(Roles.Admin))
+        {
+            <a class="btn btn-secondary btn-sm" href="/Ciclos/Historial">Reabrir @c.Codigo (Administrador)</a>
+        }
         @if (Model.CicloAbierto is { } a2)
         {
             <a class="btn btn-primary btn-sm" href="/Ciclos/Seleccionar?codigo=@a2.Codigo&volver=%2FCiclos%2FProduccion">Ir a @a2.Codigo</a>

@@ -427,4 +427,31 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
         }
         await Post("Guardar", Form(28, 30, 10, 60));   // deja los valores originales para las demás pruebas
     }
+
+    [Fact]
+    public async Task ReabrirCiclo_SoloAdministradorDesdeHistorial()
+    {
+        var fin = Cliente();
+        await IngresarAsync(fin, "carolina.diaz@ejemplo.cl");
+        Assert.DoesNotContain("Reabrir ciclo", await fin.GetStringAsync("/Ciclos/Historial"));
+
+        var adm = Cliente();
+        await IngresarAsync(adm, "admin@ejemplo.cl");
+        Assert.Contains("Reabrir AGO-2026", System.Net.WebUtility.HtmlDecode(await adm.GetStringAsync("/Ciclos/Historial")));
+        int id;
+        using (var scope = app.Services.CreateScope())
+            id = (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Ciclos.SingleAsync(c => c.Codigo == "AGO-2026")).Id;
+        var r = await adm.PostAsync("/Ciclos/Historial?handler=Reabrir", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["cicloId"] = id.ToString(), ["motivo"] = "Pago registrado con N° de operación equivocado",
+            ["__RequestVerificationToken"] = await TokenAsync(adm, "/Ciclos/Historial")
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, r.StatusCode);
+        var html = System.Net.WebUtility.HtmlDecode(await adm.GetStringAsync("/Ciclos/Historial"));
+        Assert.Contains("Ciclo reabierto", html);
+        Assert.Contains("Reabierto el", html);
+        Assert.DoesNotContain("Reabrir AGO-2026", html);
+        using (var scope = app.Services.CreateScope())
+            Assert.Equal(CicloEstado.Abierto, (await scope.ServiceProvider.GetRequiredService<AppDbContext>().Ciclos.SingleAsync(c => c.Id == id)).Estado);
+    }
 }
