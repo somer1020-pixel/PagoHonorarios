@@ -26,4 +26,9 @@
     <ProjectReference Include="..\..\src\IpsosPagoHonorarios.Web\IpsosPagoHonorarios.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Boleta ficticia con el formato de la app del SII: PDF solo imagen, sin texto (se lee por OCR). -->
+    <None Update="Recursos\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

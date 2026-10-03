@@ -128,3 +128,17 @@ GitHub Actions (`.github/workflows/ci.yml`) compila y prueba en cada push; en `m
 ## Pendientes de definición (TODO(diseño))
 
 Supuesto bruto vs. líquido (R-04), formato de nómina bancaria, día de pago, PDFs reales anonimizados, formato de exportación del sistema de encuestas, logo oficial, códigos BANEFE/SANTANDER (37), glosa de MYSTERY SHOPPING, estados de SolicitudCorreccion, si el reenvío exige 0 observaciones abiertas (hoy se permite reenviar con pendientes), política de contraseña (provisoria: 8 caracteres con minúscula y número), fuente del dato “boleta anulada”, umbral de “cuenta muy distinta” y proveedor de correo/almacenamiento. Detalle en `docs/README-handoff.md` §14.
+
+## OCR de boletas sin texto
+
+Algunas boletas (por ejemplo, las compartidas desde la app del SII en el celular) son PDF sin texto: el contenido viene
+dibujado. En ese caso la aplicación convierte la página a imagen (pdfium, paquete `Docnet.Core`) y la lee con
+**Tesseract** en español (`Ocr/tessdata/spa.traineddata`). La lectura por OCR queda con confianza **Media** como máximo
+para que Operaciones o Finanzas confirmen los datos; si la OCR no está disponible, la boleta queda para corrección manual.
+
+- **Windows (servidor y desarrollo):** no requiere instalación; `x64\tesseract.exe` y sus DLL vienen en el paquete `TesseractOCR`
+  y se copian a la salida. Si Control inteligente de aplicaciones bloquea esos binarios en un PC de desarrollo, la OCR
+  queda desactivada y el resto funciona igual.
+- **Linux:** `sudo apt-get install tesseract-ocr`.
+- Configuración (`appsettings.json`, sección `Ocr`): `Habilitado`, `Tesseract` (ruta del ejecutable), `Tessdata`, `Idioma`.
+

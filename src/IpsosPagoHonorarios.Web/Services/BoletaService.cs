@@ -17,6 +17,9 @@ public static class LectorPdf
 
     public static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
+    /// <summary>Hay texto real en el PDF (no solo dibujos o imágenes).</summary>
+    public static bool TieneTexto(IEnumerable<string> lineas) => string.Concat(lineas).Count(char.IsLetterOrDigit) >= 20;
+
     public static List<string> ExtraerLineas(byte[] pdf)
     {
         var lineas = new List<string>();
@@ -47,7 +50,8 @@ public sealed record ResultadoSubida(BoletaHonorarios Boleta, ResultadoConciliac
 
 /// <summary>Boletas: subida (portal u Operaciones), lectura, conciliación y seguimiento.</summary>
 public class BoletaService(
-    AppDbContext db, CicloService ciclos, Parametros parametros, Almacenamiento archivos, Auditor auditor, Correos correos, IUsuarioActual usuario)
+    AppDbContext db, CicloService ciclos, Parametros parametros, Almacenamiento archivos, Auditor auditor, Correos correos, IUsuarioActual usuario,
+    ILectorOcr? ocr = null)
 {
     /// <summary>
     /// R-19 / R-22 / R-06 / R-18: valida el archivo, lee la boleta, rechaza si el emisor no es el prestador, concilia con sus
@@ -67,8 +71,22 @@ public class BoletaService(
         if (await db.Boletas.AnyAsync(b => b.HashPdf == hash)) throw new ReglaException("Este PDF ya fue subido (duplicado).");
 
         LecturaBoleta lectura;
-        try { lectura = LectorBoletaTexto.Leer(LectorPdf.ExtraerLineas(pdf)); }
+        var porOcr = false;
+        try
+        {
+            var lineas = LectorPdf.ExtraerLineas(pdf);
+            // PDF sin texto (p. ej. compartido desde la app del SII: el texto viene dibujado): se lee por OCR.
+            if (!LectorPdf.TieneTexto(lineas) && ocr is not null && await ocr.LeerAsync(pdf) is { } reconocidas)
+            {
+                lineas = reconocidas;
+                porOcr = true;
+            }
+            lectura = LectorBoletaTexto.Leer(lineas);
+        }
         catch (Exception) { throw new ReglaException("No se pudo leer el PDF."); }
+        // La OCR puede confundir dígitos: como máximo confianza media, para que Operaciones o Finanzas confirmen la lectura.
+        if (porOcr)
+            lectura = lectura with { Confianza = lectura.Confianza == Confianza.Alta ? Confianza.Media : lectura.Confianza, TextoNormalizado = "[OCR]\n" + lectura.TextoNormalizado };
 
         var prest = p.Lineas.First(l => l.PrestadorId == prestadorId).Prestador;
         if (RutHelper.TryParse(lectura.Datos.RutEmisor, out var emisor, out _) && emisor != prest.Rut)

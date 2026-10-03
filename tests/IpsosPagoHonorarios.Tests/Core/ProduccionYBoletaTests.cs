@@ -161,4 +161,30 @@ public class ProduccionYBoletaTests
         Assert.Equal(Confianza.Baja, LectorBoletaTexto.CalcularConfianza(l.Datos with { Liquido = 1 }));
         Assert.Equal("ELECTRONICA N°", LectorBoletaTexto.Normalizar("Electrónica n°"));
     }
+
+    [Fact]
+    public void Lectura_FormatoAppDelSii_TextoDeOcr()
+    {
+        // Texto tal como lo entrega la OCR de una boleta compartida desde la app del SII (datos ficticios): "N*117",
+        // "Total Honorario $" en singular, nombre en dos líneas y líneas en blanco.
+        string[] lineas =
+        [
+            "BOLETA DE HONORARIOS ELECTRÓNICA N*117", "", "Fecha: 01 de octubre de 2026", "", "PERSONA FICTICIA", "", "DE PRUEBA",
+            "Rut: 12.345.678-5", "", "Giro(s):", "OTRAS ACTIVIDADES ESPECIALIZADAS DE", "DISENO N.C.P.", "", "Dirección:", "calle ficticia 123, NUNOA", "",
+            "Señor(es): IPSOS OBSERVER (CHILE)S.A.", "Rut: 76.007.075-0", "", "Por atencion profesional Monto", "",
+            "SERVICIOS DE PRUEBA", "IPSOS OBSERVER 471.976", "Total Honorario $ 471.976", "", "15,25% Impto. retenido 71.976", "", "Total 400.000", "",
+            "El contribuyente receptor de esta boleta debe retener el 15,25%", "", "1234567800000E43F683", "Verifique este documento en www.sii.cl", "",
+            "Res. Ex. N* 83 de 30/08/2004"
+        ];
+        var l = LectorBoletaTexto.Leer(lineas);
+        Assert.Equal("117", l.Datos.Numero);
+        Assert.Equal("12345678-5", l.Datos.RutEmisor);
+        Assert.Equal("76007075-0", l.Datos.RutReceptor);
+        Assert.Equal("PERSONA FICTICIA DE PRUEBA", l.Datos.NombreEmisor);
+        Assert.Equal(new DateOnly(2026, 10, 1), l.Datos.FechaEmision);
+        Assert.Equal((471976m, 71976m, 400000m), (l.Datos.Bruto, l.Datos.Retencion, l.Datos.Liquido));
+        Assert.Equal(Confianza.Alta, l.Confianza);
+        Assert.False(LectorPdf.TieneTexto(["", " ", "·"]));
+        Assert.True(LectorPdf.TieneTexto(lineas));
+    }
 }

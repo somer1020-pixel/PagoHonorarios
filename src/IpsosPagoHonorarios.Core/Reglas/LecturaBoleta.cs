@@ -7,14 +7,18 @@ namespace IpsosPagoHonorarios.Core;
 /// <summary>Expresiones regulares configurables para leer la boleta del SII (texto ya normalizado).</summary>
 public sealed class OpcionesLectura
 {
-    /// <summary>"BOLETA DE HONORARIOS ELECTRONICA" puede venir en una o dos líneas; el N° aparece como "N° 164" o "N ° 164".</summary>
-    public string Numero { get; set; } = @"BOLETA\s+DE\s+HONORARIOS\s+ELECTRONICA.*?\bN\s*[°º]?\s*\.?\s*:?\s*(\d+)";
+    /// <summary>
+    /// "BOLETA DE HONORARIOS ELECTRONICA" puede venir en una o dos líneas; el N° aparece como "N° 164", "N ° 164" o "Nº117"
+    /// (la OCR a veces lee el símbolo ° como "*" u "o").
+    /// </summary>
+    public string Numero { get; set; } = @"BOLETA\s+DE\s+HONORARIOS\s+ELECTRONICA.*?\bN\s*[°º*O]?\s*\.?\s*:?\s*(\d+)";
     public string Rut { get; set; } = @"(\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK])";
     public string FechaLarga { get; set; } = @"(\d{1,2})\s+DE\s+([A-Z]+)\s+DE\s+(\d{4})";
     public string FechaCorta { get; set; } = @"(\d{2})/(\d{2})/(\d{4})";
-    public string Bruto { get; set; } = @"TOTAL\s+HONORARIOS";
+    /// <summary>"Total Honorarios" (PDF del sitio del SII) o "Total Honorario $" (boleta de la app del SII).</summary>
+    public string Bruto { get; set; } = @"TOTAL\s+HONORARIOS?";
     public string Retencion { get; set; } = @"IMPTO\.?\s+RETENIDO|RETENCION";
-    public string Liquido { get; set; } = @"^\s*TOTAL\b(?!\s+HONORARIOS)";
+    public string Liquido { get; set; } = @"^\s*TOTAL\b(?!\s+HONORARIO)";
 }
 
 public sealed record LecturaBoleta(DatosBoleta Datos, Confianza Confianza, string TextoNormalizado);
@@ -41,7 +45,7 @@ public static class LectorBoletaTexto
     public static LecturaBoleta Leer(IEnumerable<string> lineas, OpcionesLectura? op = null)
     {
         op ??= new OpcionesLectura();
-        var norm = lineas.Select(Normalizar).ToList();
+        var norm = lineas.Select(Normalizar).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
         var texto = string.Join("\n", norm);
 
         string? numero = null;
@@ -61,10 +65,16 @@ public static class LectorBoletaTexto
         {
             // El nombre del emisor suele estar en la línea anterior a su RUT.
             var idx = norm.FindIndex(l => Regex.Matches(l, op.Rut).Any(m => RutHelper.TryParse(Regex.Replace(m.Value, @"\s", ""), out var c, out _) && $"{c}" == emisor.Split('-')[0]));
-            // El nombre del emisor está sobre su RUT (a veces con el N° de boleta entre medio).
-            for (var i = idx - 1; i >= 0 && i >= idx - 3 && nombre is null; i--)
-                if (!norm[i].Any(char.IsDigit) && !Regex.IsMatch(norm[i], @"BOLETA|HONORARIOS|ELECTRONICA") && norm[i].Trim().Length > 3)
-                    nombre = norm[i].Trim();
+            // El nombre del emisor está sobre su RUT, a veces en dos líneas (app del SII) y a veces con el N° de boleta entre medio.
+            var partes = new List<string>();
+            for (var i = idx - 1; i >= 0 && i >= idx - 4; i--)
+            {
+                var l = norm[i].Trim();
+                var esNombre = !l.Any(char.IsDigit) && !l.Contains(':') && !Regex.IsMatch(l, @"BOLETA|HONORARIOS|ELECTRONICA") && l.Length > 3;
+                if (esNombre) partes.Insert(0, l);
+                else if (partes.Count > 0) break;
+            }
+            if (partes.Count > 0) nombre = string.Join(" ", partes.TakeLast(2));
         }
 
         DateOnly? fecha = null;

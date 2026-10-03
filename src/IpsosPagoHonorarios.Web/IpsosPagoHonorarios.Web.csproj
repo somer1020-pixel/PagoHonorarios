@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="Docnet.Core" Version="2.6.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -14,6 +15,15 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
+    <!-- OCR de boletas sin texto (PDF de la app del SII): pdfium (Docnet) convierte la página a imagen y Tesseract la lee.
+         TesseractOCR aporta los binarios de Tesseract para Windows (x64\tesseract.exe y sus DLL). -->
+    <PackageReference Include="TesseractOCR" Version="5.5.2" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(PkgTesseractOCR)\x64\tesseract.exe" Condition="'$(PkgTesseractOCR)' != '' And Exists('$(PkgTesseractOCR)\x64\tesseract.exe')"
+          Link="x64\tesseract.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Ocr\tessdata\*.traineddata" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
