@@ -88,6 +88,8 @@ dotnet test
 
 Pruebas de carga y estrés contra SQL Server: [`tests/IpsosPagoHonorarios.Carga`](tests/IpsosPagoHonorarios.Carga/README.md). Resultados en [`docs/pruebas-de-carga.md`](docs/pruebas-de-carga.md).
 
+Pruebas de seguridad (inyección SQL y control de acceso): [`docs/pruebas-de-seguridad.md`](docs/pruebas-de-seguridad.md).
+
 66 pruebas cubren las 28 reglas, incluidos los mínimos de la especificación: RUT y montos (`ROUND(250 × 85,28) = 21.320`), los 6 resultados de R-24 con el caso DATA PROCESSING (2 coincide, 2 tipeo, 1 nueva, 1 distinta, 1 tercero), R-28 con sus 3 casos, conciliación con varias filas ($345.000), fecha límite día 10, plazo de 60 minutos, aprobación bloqueada con observaciones o cuentas sin validar, autorización del Prestador (no ve ni sube boletas de otro RUT) y el round-trip XLSX con `B3 = Σ H`.
 
 | Archivo | Reglas |
