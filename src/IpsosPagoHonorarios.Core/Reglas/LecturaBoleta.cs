@@ -11,7 +11,7 @@ public sealed class OpcionesLectura
     /// "BOLETA DE HONORARIOS ELECTRONICA" puede venir en una o dos líneas; el N° aparece como "N° 164", "N ° 164" o "Nº117"
     /// (la OCR a veces lee el símbolo ° como "*" u "o").
     /// </summary>
-    public string Numero { get; set; } = @"BOLETA\s+DE\s+HONORARIOS\s+ELECTRONICA.*?\bN\s*[°º*O]?\s*\.?\s*:?\s*(\d+)";
+    public string Numero { get; set; } = @"BOLETA\s+DE\s+HONORARIOS\s+ELECTRONICA.*?\bN\s*[°º*O0]?\s*\.?\s*:?\s*(\d+)";
     public string Rut { get; set; } = @"(\d{1,2}\.?\d{3}\.?\d{3}\s*-\s*[\dK])";
     public string FechaLarga { get; set; } = @"(\d{1,2})\s+DE\s+([A-Z]+)\s+DE\s+(\d{4})";
     public string FechaCorta { get; set; } = @"(\d{2})/(\d{2})/(\d{4})";
@@ -48,12 +48,12 @@ public static class LectorBoletaTexto
     public static LecturaBoleta Leer(IEnumerable<string> lineas, OpcionesLectura? op = null)
     {
         op ??= new OpcionesLectura();
-        var norm = lineas.Select(Normalizar).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+        var norm = lineas.Select(Normalizar).Select(CorregirNumeros).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
         var texto = string.Join("\n", norm);
 
         string? numero = null;
         var mNum = Regex.Match(texto, op.Numero, RegexOptions.Singleline);
-        if (mNum.Success) numero = mNum.Groups[1].Value;
+        if (mNum.Success) numero = mNum.Groups[1].Value.TrimStart('0') is { Length: > 0 } n0 ? n0 : "0";   // el folio no lleva ceros a la izquierda
 
         string? emisor = null, receptor = null, nombre = null;
         foreach (Match m in Regex.Matches(texto, op.Rut))
@@ -127,6 +127,13 @@ public static class LectorBoletaTexto
         }
         return lineas.Select(l => string.Join(" ", l.OrderBy(x => x.X).Select(x => x.Texto.Trim()))).ToList();
     }
+
+    /// <summary>
+    /// Variantes de la OCR en los números: miles separados con espacio o coma ("701 ,754", "76.007,075-0") pasan a punto
+    /// ("701.754", "76.007.075-0"). Solo grupos de exactamente 3 dígitos: no toca porcentajes como "14,5%" o "15,25%".
+    /// </summary>
+    public static string CorregirNumeros(string linea) =>
+        Regex.Replace(linea, @"(?<=\d)\s*[.,]\s*(?=\d{3}(?!\d))", ".");
 
     /// <summary>Alta: todos los campos y bruto − retención = líquido. Media: falta un campo que no es monto. Baja: otro caso.</summary>
     public static Confianza CalcularConfianza(DatosBoleta d)

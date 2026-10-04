@@ -200,4 +200,27 @@ public class ProduccionYBoletaTests
         ];
         Assert.Equal(["Total Honorario $ 701.754", "14,5% Impto. retenido 101.754", "Total 600.000"], LectorBoletaTexto.AgruparEnLineas(palabras));
     }
+
+    [Fact]
+    public void Lectura_OcrDeWindows_NumerosConEspaciosYComas()
+    {
+        // Así entrega el texto el OCR de Windows (datos ficticios): "N0117", miles con espacio y coma, RUT con una coma.
+        string[] lineas =
+        [
+            "BOLETA DE HONORARIOS ELECTRÓNICA N0117", "Fecha: 01 de octubre de 2026", "PERSONA FICTICIA", "DE PRUEBA", "Rut: 12.345.678-5",
+            "Giro(s):", "OTRAS ACTIVIDADES ESPECIALIZADAS DE", "DISEÑO N.C.P,", "Dirección:", "calle ficticia 123, NUNOA",
+            "Señores): IPSOS OBSERVER (CHILE)S.A.", "Rut: 76.007,075-0", "Por atencion profesional Monto", "SERVICIOS DE PRUEBA", "471 ,976",
+            "IPSOS OBSERVER", "Total Honorario $ 471 ,976", "15,25% Impto. retenido 71 ,976", "Total 400.000"
+        ];
+        var l = LectorBoletaTexto.Leer(lineas);
+        Assert.Equal("117", l.Datos.Numero);
+        Assert.Equal("12345678-5", l.Datos.RutEmisor);
+        Assert.Equal("76007075-0", l.Datos.RutReceptor);
+        Assert.Equal("PERSONA FICTICIA DE PRUEBA", l.Datos.NombreEmisor);
+        Assert.Equal(new DateOnly(2026, 10, 1), l.Datos.FechaEmision);
+        Assert.Equal((471976m, 71976m, 400000m), (l.Datos.Bruto, l.Datos.Retencion, l.Datos.Liquido));
+        Assert.Equal(Confianza.Alta, l.Confianza);
+        Assert.Equal("14,5% Impto. 101.754 y 15,25%", LectorBoletaTexto.CorregirNumeros("14,5% Impto. 101 ,754 y 15,25%"));
+        Assert.Equal("30/08/2004 · 1.234.567", LectorBoletaTexto.CorregirNumeros("30/08/2004 · 1 .234, 567"));
+    }
 }
