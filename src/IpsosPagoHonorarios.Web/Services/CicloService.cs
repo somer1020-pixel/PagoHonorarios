@@ -69,6 +69,7 @@ public class CicloService(AppDbContext db, Parametros parametros, Auditor audito
 
     public async Task<List<Observacion>> ObservacionesAsync(int planillaId) =>
         await db.Observaciones.Include(o => o.LineaPago).ThenInclude(l => l.Prestador)
+            .Include(o => o.LineaPago).ThenInclude(l => l.Job).Include(o => o.LineaPago).ThenInclude(l => l.Glosa)
             .Where(o => o.LineaPago.PlanillaId == planillaId).OrderBy(o => o.Id).ToListAsync();
 
     public async Task<Devolucion?> DevolucionActivaAsync(int planillaId) =>

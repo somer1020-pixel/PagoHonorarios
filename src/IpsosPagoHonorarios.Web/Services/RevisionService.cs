@@ -68,8 +68,9 @@ public class RevisionService(
         return d;
     }
 
-    /// <summary>Operaciones corrige una observación (puede ajustar cantidad, valor unitario o nombre).</summary>
-    public async Task CorregirAsync(int observacionId, string respuesta, decimal? cantidad = null, decimal? valorUnitario = null)
+    /// <summary>Operaciones corrige una observación: puede ajustar cantidad, valor unitario, Job Book Number y glosa (ítem).</summary>
+    public async Task CorregirAsync(int observacionId, string respuesta, decimal? cantidad = null, decimal? valorUnitario = null,
+        string? jobBookNumber = null, int? glosaId = null)
     {
         var o = await db.Observaciones.Include(x => x.LineaPago).ThenInclude(l => l.Planilla).ThenInclude(p => p.Ciclo)
                     .FirstOrDefaultAsync(x => x.Id == observacionId) ?? throw new ReglaException("Observación no encontrada.");
@@ -79,19 +80,50 @@ public class RevisionService(
             throw new ReglaException("La planilla no admite correcciones.");
         if (string.IsNullOrWhiteSpace(respuesta)) throw new ReglaException("Describe la corrección.");
         var l = o.LineaPago;
+        var cambios = new List<string>();
+        jobBookNumber = string.IsNullOrWhiteSpace(jobBookNumber) ? null : jobBookNumber.Trim();
+        if (jobBookNumber is not null)
+        {
+            if (!ProduccionReglas.JobValido(jobBookNumber)) throw new ReglaException("El Job Book Number debe tener 12 dígitos.");
+            var antes = await db.Jobs.FirstAsync(j => j.Id == l.JobId);
+            if (antes.JobBookNumber != jobBookNumber)
+            {
+                var job = await db.Jobs.FirstOrDefaultAsync(j => j.JobBookNumber == jobBookNumber);
+                if (job is null)
+                {
+                    // Igual que en la carga de producción: un Job nuevo se crea y queda en la bitácora.
+                    job = new Job { JobBookNumber = jobBookNumber, Nombre = "(creado en corrección)", AreaSugeridaId = l.Planilla.AreaId };
+                    db.Jobs.Add(job);
+                    auditor.Registrar(nameof(Job), jobBookNumber, "Crear Job (corrección)", $"Línea {l.Numero}");
+                }
+                l.Job = job;
+                cambios.Add($"Job {antes.JobBookNumber} → {jobBookNumber}");
+            }
+        }
+        if (glosaId is not null && glosaId != l.GlosaId)
+        {
+            var nueva = await db.Glosas.FirstOrDefaultAsync(g => g.Id == glosaId) ?? throw new ReglaException("Glosa no encontrada.");
+            var antes = await db.Glosas.FirstAsync(g => g.Id == l.GlosaId);
+            l.GlosaId = nueva.Id;
+            l.Glosa = nueva;
+            cambios.Add($"Ítem {antes.Item} ({antes.NombreGlosa}) → {nueva.Item} ({nueva.NombreGlosa})");
+        }
         if (cantidad is not null || valorUnitario is not null)
         {
             if (cantidad is <= 0 || valorUnitario is <= 0) throw new ReglaException("Valor unitario y cantidad deben ser mayores que 0.");
             l.Cantidad = cantidad ?? l.Cantidad;
             l.ValorUnitarioBruto = valorUnitario ?? l.ValorUnitarioBruto;
-            l.ValorTotalBruto = Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad);
+            var total = Montos.ValorTotal(l.ValorUnitarioBruto, l.Cantidad);
+            if (total != l.ValorTotalBruto) cambios.Add($"Total {Formato.Clp(l.ValorTotalBruto)} → {Formato.Clp(total)}");
+            l.ValorTotalBruto = total;
         }
         o.Estado = ObservacionEstado.Corregida;
         o.Respuesta = respuesta.Trim();
         o.CorregidaPor = usuario.Nombre;
         o.CorregidaEn = ciclos.AhoraUtc;
         l.Estado = LineaEstado.Corregida;
-        auditor.Registrar(nameof(Observacion), o.Id, "Corregir observación", $"Línea {l.Numero}: {respuesta}");
+        auditor.Registrar(nameof(Observacion), o.Id, "Corregir observación",
+            $"Línea {l.Numero}: {respuesta}" + (cambios.Count == 0 ? "" : " · " + string.Join(" · ", cambios)));
         await db.SaveChangesAsync();
     }
 

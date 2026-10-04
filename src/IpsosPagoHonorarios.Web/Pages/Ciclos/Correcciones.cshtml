@@ -89,7 +89,17 @@ else
                             <div class="campos-2 mb-2">
                                 <div><label class="form-label" for="q-@o.Id">Cantidad (G)</label><input id="q-@o.Id" name="cantidad" class="form-control form-control-sm" placeholder="@Formato.Cantidad(l.Cantidad)" inputmode="decimal" /></div>
                                 <div><label class="form-label" for="v-@o.Id">Valor unitario (F)</label><input id="v-@o.Id" name="valorUnitario" class="form-control form-control-sm" placeholder="@l.ValorUnitarioBruto.ToString("0.##")" inputmode="decimal" /></div>
+                                <div><label class="form-label" for="j-@o.Id">Job Book Number</label>
+                                    <input id="j-@o.Id" name="jobBookNumber" class="form-control form-control-sm mono" list="jobs-lista" placeholder="@l.Job.JobBookNumber" inputmode="numeric" pattern="\d{12}" title="12 dígitos" /></div>
+                                <div><label class="form-label" for="g-@o.Id">Ítem (glosa)</label>
+                                    <select id="g-@o.Id" name="glosaId" class="form-select form-select-sm">
+                                        @foreach (var g in Model.Glosas)
+                                        {
+                                            <option value="@g.Id" selected="@(g.Id == l.GlosaId)">@g.Item · @g.NombreGlosa</option>
+                                        }
+                                    </select></div>
                             </div>
+                            <p class="m-0 mb-2 text-12 muted">Deja en blanco lo que no cambia. Ahora: Job <span class="mono">@l.Job.JobBookNumber</span> · ítem <span class="mono">@l.Glosa.Item</span> (@l.Glosa.NombreGlosa, cuenta <span class="mono">@l.Glosa.CuentaContable</span>).</p>
                         }
                         <label class="form-label" for="r-@o.Id">Respuesta</label>
                         <textarea id="r-@o.Id" name="respuesta" class="form-control" rows="2" required></textarea>
@@ -122,3 +132,7 @@ else
         <div class="aviso aviso-neutral">Sin observaciones en esta planilla.</div>
     }
 }
+<datalist id="jobs-lista">
+    @foreach (var j in Model.Jobs) { <option value="@j.JobBookNumber">@j.Nombre</option> }
+</datalist>
+

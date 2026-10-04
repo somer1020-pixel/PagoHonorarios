@@ -241,6 +241,28 @@ public class RevisionYPagoTests
     }
 
     [Fact]
+    public async Task Correccion_PuedeCambiarJobEItem()
+    {
+        using var f = await new F2F().CargarAsync();
+        f.E.Como("Andrés Paredes");
+        await f.EnviarAsync();
+        f.E.Como("Carolina Díaz");
+        var linea = f.P.Lineas.First();
+        var o = await f.E.Revision.ObservarAsync(linea.Id, ObservacionTipo.ErrorDigitacion, "Job", "corregir job");
+        await f.E.Revision.DevolverAsync(f.P.Id);
+        f.E.Como("Andrés Paredes");
+        Assert.Contains("12 dígitos", (await Assert.ThrowsAsync<ReglaException>(() => f.E.Revision.CorregirAsync(o.Id, "Job", jobBookNumber: "123"))).Message);
+
+        var otra = await f.E.Db.Glosas.SingleAsync(g => g.NombreGlosa == DPG);
+        await f.E.Revision.CorregirAsync(o.Id, "Job y glosa corregidos", jobBookNumber: "260099900101", glosaId: otra.Id);
+        var l = await f.E.Db.LineasPago.Include(x => x.Job).Include(x => x.Glosa).SingleAsync(x => x.Id == linea.Id);
+        Assert.Equal(("260099900101", DPG, LineaEstado.Corregida), (l.Job.JobBookNumber, l.Glosa.NombreGlosa, l.Estado));
+        var auditoria = await f.E.Db.Auditorias.ToListAsync();
+        Assert.Contains(auditoria, a => a.Accion == "Crear Job (corrección)" && a.EntidadId == "260099900101");
+        Assert.Contains(auditoria, a => a.Accion == "Corregir observación" && a.Detalle!.Contains("→ 260099900101") && a.Detalle.Contains($"Ítem") && a.Detalle.Contains(DPG));
+    }
+
+    [Fact]
     public async Task R13_AprobacionBloqueada_ConObservacionesOCuentasSinValidar()
     {
         using var f = await new F2F().CargarAsync();

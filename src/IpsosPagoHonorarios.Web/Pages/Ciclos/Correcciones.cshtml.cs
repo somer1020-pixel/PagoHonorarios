@@ -16,6 +16,8 @@ public class CorreccionesModel(
     public List<Observacion> Observaciones { get; set; } = [];
     public Devolucion? Devolucion { get; set; }
     public string? CicloSiguiente { get; set; }
+    public List<Glosa> Glosas { get; set; } = [];
+    public List<Job> Jobs { get; set; } = [];
     public bool EsDemo => env.IsDevelopment();
     public bool PuedeOperar => Puede(Roles.Operaciones);
     public bool PuedeRevisar => Puede(Roles.Finanzas);
@@ -34,12 +36,14 @@ public class CorreccionesModel(
         Observaciones = await ciclos.ObservacionesAsync(P.Id);
         Devolucion = P.Devoluciones.OrderByDescending(d => d.Id).FirstOrDefault();
         CicloSiguiente = Formato.CodigoCiclo(P.Ciclo.Periodo.AddMonths(1));
+        Glosas = await db.Glosas.OrderBy(g => g.Item).ThenBy(g => g.NombreGlosa).ToListAsync();
+        Jobs = await db.Jobs.Where(j => j.Activo).OrderBy(j => j.JobBookNumber).ToListAsync();
     }
 
     private object Ruta => new { planilla = Planilla };
 
-    public Task<IActionResult> OnPostCorregirAsync(int observacionId, string respuesta, string? cantidad, string? valorUnitario) =>
-        AccionAsync(() => revision.CorregirAsync(observacionId, respuesta, ExcelPlanilla.ParseNumero(cantidad), ExcelPlanilla.ParseNumero(valorUnitario)),
+    public Task<IActionResult> OnPostCorregirAsync(int observacionId, string respuesta, string? cantidad, string? valorUnitario, string? jobBookNumber, int? glosaId) =>
+        AccionAsync(() => revision.CorregirAsync(observacionId, respuesta, ExcelPlanilla.ParseNumero(cantidad), ExcelPlanilla.ParseNumero(valorUnitario), jobBookNumber, glosaId),
             "Observación corregida: queda para revisión de Finanzas.", Ruta, [Roles.Operaciones]);
 
     public Task<IActionResult> OnPostAceptarAsync(int observacionId) =>
