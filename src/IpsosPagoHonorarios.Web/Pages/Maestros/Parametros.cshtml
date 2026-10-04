@@ -90,4 +90,11 @@
         }
     }
 </div>
+@if (Model.LecturaSinBloqueos is { } rcsi)
+{
+    <div class="aviso @(rcsi ? "aviso-info" : "aviso-danger") text-13">
+        <strong>Base de datos · lecturas sin bloqueo (READ_COMMITTED_SNAPSHOT): @(rcsi ? "activado" : "DESACTIVADO")</strong>
+        @if (!rcsi) { <span>Con varios usuarios a la vez las consultas se bloquean entre sí y pueden fallar. Pide al DBA ejecutar <span class="mono">@IpsosPagoHonorarios.Web.Data.BaseDatos.ScriptLectura</span>.</span> }
+    </div>
+}
 

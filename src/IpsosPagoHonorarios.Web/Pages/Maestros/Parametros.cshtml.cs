@@ -16,6 +16,8 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
     public List<TasaRetencion> Tasas { get; set; } = [];
     public List<Ciclo> Abiertos { get; set; } = [];
     public ResultadoOcr? PruebaOcr { get; set; }
+    /// <summary>READ_COMMITTED_SNAPSHOT de SQL Server (null = no es SQL Server).</summary>
+    public bool? LecturaSinBloqueos { get; set; }
     public LecturaBoleta? PruebaLectura { get; set; }
     public string? PruebaArchivo { get; set; }
 
@@ -24,6 +26,7 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
         P = await parametros.ObtenerAsync();
         Tasas = await db.TasasRetencion.OrderByDescending(t => t.Anio).ToListAsync();
         Abiertos = await db.Ciclos.Where(c => c.Estado == CicloEstado.Abierto).OrderBy(c => c.Periodo).ToListAsync();
+        LecturaSinBloqueos = await BaseDatos.LecturaSinBloqueosAsync(db);
     }
 
     public Task<IActionResult> OnPostGuardarAsync(int diaDescargaDesde, int diaDescargaHasta, int diaLimiteBoleta, int diaPago,

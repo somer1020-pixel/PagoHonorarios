@@ -20,6 +20,8 @@ public class PrestadoresModel(AppDbContext db, PrestadoresService prestadores, C
     [TempData] public string? Enlace { get; set; }
     [TempData] public string? ResultadoCarga { get; set; }
 
+    public const int MaxLista = 100;
+    public int Total { get; set; }
     public bool PuedeEditar => Puede(Roles.Operaciones, Roles.Finanzas);
     public bool PuedeValidar => Puede(Roles.Finanzas);
 
@@ -33,7 +35,9 @@ public class PrestadoresModel(AppDbContext db, PrestadoresService prestadores, C
             int.TryParse(digitos.Length > 8 ? digitos[..^1] : digitos, out var rut);
             q = q.Where(p => p.NombreCompleto.Contains(t) || (rut > 0 && p.Rut == rut));
         }
-        Lista = await q.OrderBy(p => p.NombreCompleto).ToListAsync();
+        // Se muestran los primeros 100: con miles de prestadores, la lista completa hacía lenta la página (buscar para acotar).
+        Total = await q.CountAsync();
+        Lista = await q.OrderBy(p => p.NombreCompleto).Take(MaxLista).ToListAsync();
         if (!Nuevo)
             Sel = Id is null ? null : await db.Prestadores.Include(p => p.Cuentas).FirstOrDefaultAsync(p => p.Id == Id);
         Bancos = await db.Bancos.OrderBy(b => b.Id).Select(b => b.Nombre).ToListAsync();

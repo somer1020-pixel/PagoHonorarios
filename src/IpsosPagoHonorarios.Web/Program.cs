@@ -138,7 +138,11 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    if (db.Database.IsSqlServer()) await db.Database.MigrateAsync();
+    if (db.Database.IsSqlServer())
+    {
+        await db.Database.MigrateAsync();
+        await BaseDatos.AsegurarLecturaSinBloqueosAsync(db, app.Logger);
+    }
     else
     {
         Directory.CreateDirectory(Path.Combine(app.Environment.ContentRootPath, "App_Data"));

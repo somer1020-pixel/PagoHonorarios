@@ -53,6 +53,36 @@ public class CicloService(AppDbContext db, Parametros parametros, Auditor audito
         if (c.Estado == CicloEstado.Cerrado) throw new ReglaException($"El ciclo {c.Codigo} está cerrado: solo lectura.");
     }
 
+    /// <summary>
+    /// Toma la fila de la planilla para escribir (dentro de una transacción): las escrituras sobre una misma planilla
+    /// (subir boletas, reemplazarla) se ordenan una tras otra en vez de bloquearse entre sí. En la prueba de carga, sin esto,
+    /// reemplazar una planilla mientras sus prestadores subían boletas producía deadlocks.
+    /// </summary>
+    public Task BloquearPlanillaAsync(int planillaId) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Planillas SET Version = Version WHERE Id = {planillaId}");
+
+    /// <summary>Conflicto de concurrencia (otra persona modificó lo mismo a la vez): deadlock de SQL Server o fila ya cambiada.</summary>
+    public static bool EsConflicto(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+            if (e is DbUpdateConcurrencyException || (e is Microsoft.Data.SqlClient.SqlException s && s.Number == 1205)) return true;
+        return false;
+    }
+
+    public const string MensajeConflicto = "Otra persona modificó esta planilla al mismo tiempo. Vuelve a intentarlo.";
+
+    /// <summary>
+    /// La planilla con solo las filas y boletas de un prestador: lo que necesita subir o conciliar su boleta. En la prueba de
+    /// carga, leer la planilla completa (cientos de filas) en cada subida era lo más costoso del pico del portal.
+    /// </summary>
+    public Task<Planilla?> PlanillaDelPrestadorAsync(int id, int prestadorId) =>
+        db.Planillas
+            .Include(p => p.Ciclo).Include(p => p.Area)
+            .Include(p => p.Lineas.Where(l => l.PrestadorId == prestadorId)).ThenInclude(l => l.Prestador).ThenInclude(x => x.Cuentas)
+            .Include(p => p.Boletas.Where(b => b.PrestadorId == prestadorId))
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(p => p.Id == id);
+
     /// <summary>Carga una planilla con todo lo necesario para las reglas.</summary>
     /// <param name="todasLasAreas">Ignora el alcance por área del usuario (procesos que deben mantener la consistencia entre áreas).</param>
     public Task<Planilla?> PlanillaCompletaAsync(int id, bool todasLasAreas = false) =>

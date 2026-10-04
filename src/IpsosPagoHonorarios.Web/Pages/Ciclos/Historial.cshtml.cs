@@ -17,16 +17,18 @@ public class HistorialModel(AppDbContext db, Almacenamiento archivos, PagoServic
 
     public async Task OnGetAsync()
     {
-        var ciclos = await db.Ciclos.Include(c => c.Planillas).ThenInclude(p => p.Lineas).AsSplitQuery().OrderByDescending(c => c.Periodo).ToListAsync();
+        // Totales agregados en la base: antes se cargaban todas las líneas de todos los ciclos (decenas de miles de filas).
+        var ciclos = await db.Ciclos.AsNoTracking().OrderByDescending(c => c.Periodo).ToListAsync();
         Reaperturas = (await db.Auditorias.Where(a => a.Entidad == nameof(Ciclo) && a.Accion == "Reabrir ciclo").OrderByDescending(a => a.Id).ToListAsync())
             .ToLookup(a => a.EntidadId ?? "");
-        var pagos = await db.Transferencias.Select(t => new { t.Planilla.CicloId, t.Fecha }).ToListAsync();
-        Filas = ciclos.Select(c =>
-        {
-            var lineas = c.Planillas.SelectMany(p => p.Lineas).Where(l => l.Estado != LineaEstado.Diferida).ToList();
-            return new Fila(c, c.Planillas.Count, lineas.Select(l => l.PrestadorId).Distinct().Count(), lineas.Sum(l => l.ValorTotalBruto),
-                pagos.Where(p => p.CicloId == c.Id).Select(p => (DateOnly?)p.Fecha).Max());
-        }).ToList();
+        var planillas = await db.Planillas.GroupBy(p => p.CicloId).Select(g => new { CicloId = g.Key, N = g.Count() }).ToDictionaryAsync(x => x.CicloId, x => x.N);
+        var lineas = await db.LineasPago.Where(l => l.Estado != LineaEstado.Diferida).GroupBy(l => l.Planilla.CicloId)
+            .Select(g => new { CicloId = g.Key, Prestadores = g.Select(l => l.PrestadorId).Distinct().Count(), Monto = g.Sum(l => l.ValorTotalBruto) })
+            .ToDictionaryAsync(x => x.CicloId);
+        var pagos = await db.Transferencias.GroupBy(t => t.Planilla.CicloId).Select(g => new { CicloId = g.Key, Ultimo = g.Max(t => t.Fecha) })
+            .ToDictionaryAsync(x => x.CicloId, x => (DateOnly?)x.Ultimo);
+        Filas = ciclos.Select(c => new Fila(c, planillas.GetValueOrDefault(c.Id), lineas.GetValueOrDefault(c.Id)?.Prestadores ?? 0,
+            lineas.GetValueOrDefault(c.Id)?.Monto ?? 0, pagos.GetValueOrDefault(c.Id))).ToList();
     }
 
     public Task<IActionResult> OnPostReabrirAsync(int cicloId, string? motivo) =>

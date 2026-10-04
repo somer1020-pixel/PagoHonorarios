@@ -125,6 +125,22 @@ public class ProduccionService(
         }
 
         await using var tx = await db.Database.BeginTransactionAsync();
+        try { return await GuardarImportacionAsync(s, tx, planilla, area!, ciclo!, filas, prestadores, jobs, glosas, leido, avisos, nombrePlanilla, delArea); }
+        catch (Exception ex) when (CicloService.EsConflicto(ex)) { throw new ReglaException(CicloService.MensajeConflicto); }
+    }
+
+    private async Task<ResultadoImportacion> GuardarImportacionAsync(SolicitudImportacion s, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx,
+        Planilla? planilla, Area area, Ciclo ciclo, List<FilaProduccion> filas, List<Prestador> prestadores, List<Job> jobs, List<Glosa> glosas,
+        ArchivoLeido leido, List<string> avisos, string? nombrePlanilla, List<Planilla> delArea)
+    {
+        // Reemplazo: primero se toma la planilla (las boletas que suben sus prestadores esperan su turno) y se confirma su estado.
+        if (planilla is not null)
+        {
+            await ciclos.BloquearPlanillaAsync(planilla.Id);
+            var estado = await db.Planillas.IgnoreQueryFilters().Where(x => x.Id == planilla.Id).Select(x => x.Estado).SingleAsync();
+            if (estado is not (PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta))
+                throw new ReglaException($"La planilla {planilla.Titulo} de {ciclo.Codigo} ya fue enviada a Finanzas ({estado.Nombre()}).");
+        }
         // Prestadores y Jobs nuevos (R-02: se crean y se avisa).
         foreach (var f in filas)
         {

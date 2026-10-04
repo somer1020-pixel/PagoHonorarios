@@ -15,7 +15,17 @@ IF DB_ID(N'BD_PagoIpsos') IS NULL
     CREATE DATABASE [BD_PagoIpsos];
 GO
 
+-- Muchos usuarios a la vez: las lecturas no esperan a las escrituras (ver 07_LecturaSinBloqueos.sql).
+IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'BD_PagoIpsos' AND is_read_committed_snapshot_on = 0)
+    ALTER DATABASE [BD_PagoIpsos] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;
+GO
+
 USE [BD_PagoIpsos];
+GO
+
+-- sqlcmd trabaja por defecto con QUOTED_IDENTIFIER OFF; los índices filtrados (p. ej. los de Identity) lo exigen ON.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 GO
 
 /* ---------- Permisos del usuario de la aplicación (descomentar si el login ya existe) ----------
@@ -1127,6 +1137,51 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20261003224846_VariasPlanillasPorArea', N'10.0.12');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261004215711_IndicesCarga'
+)
+BEGIN
+    DROP INDEX [IX_LineasPago_PlanillaId] ON [LineasPago];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261004215711_IndicesCarga'
+)
+BEGIN
+    DROP INDEX [IX_Boletas_PlanillaId] ON [Boletas];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261004215711_IndicesCarga'
+)
+BEGIN
+    CREATE INDEX [IX_LineasPago_PlanillaId_Estado] ON [LineasPago] ([PlanillaId], [Estado]) INCLUDE ([PrestadorId], [ResultadoCuenta], [AlertaCuentaResuelta], [ValorTotalBruto]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261004215711_IndicesCarga'
+)
+BEGIN
+    CREATE INDEX [IX_Boletas_PlanillaId_PrestadorId] ON [Boletas] ([PlanillaId], [PrestadorId]) INCLUDE ([Estado]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261004215711_IndicesCarga'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261004215711_IndicesCarga', N'10.0.12');
 END;
 
 COMMIT;

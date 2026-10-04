@@ -128,11 +128,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
             e.Property(x => x.CuentaPlanillaTipo).HasMaxLength(40);
             e.Property(x => x.CuentaPlanillaNumero).HasMaxLength(30);
             e.Property(x => x.CuentaPlanillaBanco).HasMaxLength(60);
+            // Contadores del menú, panel e historial (prueba de carga): por planilla y estado sin leer la fila completa.
+            e.HasIndex(x => new { x.PlanillaId, x.Estado })
+                .IncludeProperties(x => new { x.PrestadorId, x.ResultadoCuenta, x.AlertaCuentaResuelta, x.ValorTotalBruto });
             e.Ignore(x => x.AlertaAbierta);
         });
         m.Entity<BoletaHonorarios>(e =>
         {
             e.HasIndex(x => x.HashPdf);
+            e.HasIndex(x => new { x.PlanillaId, x.PrestadorId }).IncludeProperties(x => x.Estado);   // boletas vigentes por prestador
             e.HasIndex(x => new { x.RutEmisor, x.NumeroBoleta });
             e.Property(x => x.HashPdf).HasMaxLength(64);
             e.Property(x => x.NumeroBoleta).HasMaxLength(20);

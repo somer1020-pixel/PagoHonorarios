@@ -59,7 +59,7 @@ public class BoletaService(
     /// </summary>
     public async Task<ResultadoSubida> SubirAsync(int planillaId, int prestadorId, byte[] pdf, string nombreArchivo, BoletaCanal canal, string? motivo = null)
     {
-        var p = await ciclos.PlanillaCompletaAsync(planillaId) ?? throw new ReglaException("Planilla no encontrada.");
+        var p = await ciclos.PlanillaDelPrestadorAsync(planillaId, prestadorId) ?? throw new ReglaException("Planilla no encontrada.");
         CicloService.ExigirAbierto(p.Ciclo);
         var r18 = Flujo.PuedeSubirBoleta(p, prestadorId);
         if (!r18.Ok) throw new ReglaException(string.Join(" ", r18.Motivos));
@@ -88,6 +88,32 @@ public class BoletaService(
         if (porOcr)
             lectura = lectura with { Confianza = lectura.Confianza == Confianza.Alta ? Confianza.Media : lectura.Confianza, TextoNormalizado = "[OCR]\n" + lectura.TextoNormalizado };
 
+        // Escritura: transacción que primero toma la planilla (las subidas y los reemplazos de una misma planilla van en fila)
+        // y vuelve a leerla, ya con lo que otros hayan guardado mientras se leía el PDF.
+        var propia = db.Database.CurrentTransaction is null;
+        await using var tx = propia ? await db.Database.BeginTransactionAsync() : null;
+        try
+        {
+            await ciclos.BloquearPlanillaAsync(planillaId);
+            db.ChangeTracker.Clear();
+            p = await ciclos.PlanillaDelPrestadorAsync(planillaId, prestadorId) ?? throw new ReglaException("Planilla no encontrada.");
+            r18 = Flujo.PuedeSubirBoleta(p, prestadorId);
+            if (!r18.Ok) throw new ReglaException(string.Join(" ", r18.Motivos));
+            var r = await GuardarSubidaAsync(p, prestadorId, pdf, nombreArchivo, canal, motivo, hash, lectura);
+            if (tx is not null) await tx.CommitAsync();
+            return r;
+        }
+        catch (Exception ex) when (CicloService.EsConflicto(ex)) { throw new ReglaException(CicloService.MensajeConflicto); }
+        catch (ReglaException) when (tx is not null && db.ChangeTracker.HasChanges() is false)
+        {
+            await tx.CommitAsync();   // conserva lo que se alcanzó a registrar en la bitácora (p. ej. una boleta rechazada)
+            throw;
+        }
+    }
+
+    private async Task<ResultadoSubida> GuardarSubidaAsync(Planilla p, int prestadorId, byte[] pdf, string nombreArchivo, BoletaCanal canal, string? motivo,
+        string hash, LecturaBoleta lectura)
+    {
         var prest = p.Lineas.First(l => l.PrestadorId == prestadorId).Prestador;
         if (RutHelper.TryParse(lectura.Datos.RutEmisor, out var emisor, out _) && emisor != prest.Rut)
         {

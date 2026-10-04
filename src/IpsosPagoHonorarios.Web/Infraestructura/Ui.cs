@@ -103,6 +103,8 @@ public static class Badge
 /// <summary>Datos comunes de la barra superior y el menú lateral.</summary>
 public class ContextoLayout(AppDbContext db, CicloService ciclos, IHttpContextAccessor acc)
 {
+    private static readonly ResultadoCuenta[] ResultadosAlerta = Enum.GetValues<ResultadoCuenta>().Where(r => r.EsAlerta()).ToArray();
+
     public const string CookieCiclo = "honorarios.ciclo";
 
     private bool _cargado;
@@ -128,16 +130,19 @@ public class ContextoLayout(AppDbContext db, CicloService ciclos, IHttpContextAc
             .OrderBy(d => d.VenceEn).FirstOrDefaultAsync();
         DevolucionActiva = dev;
         DevolucionArea = dev?.Planilla.Titulo;
-        var lineas = await db.LineasPago.Where(l => l.Planilla.CicloId == Ciclo.Id && l.Estado != LineaEstado.Diferida)
-            .Select(l => new { l.ResultadoCuenta, l.AlertaCuentaResuelta, l.PlanillaId, l.PrestadorId, l.Planilla.Estado }).ToListAsync();
+        // Contadores del menú (en cada página): se cuentan en la base, sin traer las líneas del ciclo.
+        var cicloId = Ciclo.Id;
+        var activas = db.LineasPago.Where(l => l.Planilla.CicloId == cicloId && l.Estado != LineaEstado.Diferida);
         // Una alerta por prestador y planilla (R-24 se informa por prestador).
-        AlertasCuenta = lineas.Where(l => l.Estado is PlanillaEstado.Borrador or PlanillaEstado.ConAlertasCuenta)
-            .Where(l => l.ResultadoCuenta.EsAlerta() && !l.AlertaCuentaResuelta).Select(l => (l.PlanillaId, l.PrestadorId)).Distinct().Count();
-        var conBoleta = await db.Boletas.Where(b => b.Planilla.CicloId == Ciclo.Id && b.Estado != BoletaEstado.Reemplazada && b.Estado != BoletaEstado.Rechazada)
-            .Select(b => new { b.PlanillaId, b.PrestadorId }).ToListAsync();
-        BoletasPendientes = lineas.Where(l => l.Estado is not (PlanillaEstado.Aprobada or PlanillaEstado.EnPago or PlanillaEstado.Cerrada))
-            .Select(l => (l.PlanillaId, l.PrestadorId)).Distinct()
-            .Count(x => !conBoleta.Any(b => b.PlanillaId == x.PlanillaId && b.PrestadorId == x.PrestadorId));
+        AlertasCuenta = await activas
+            .Where(l => (l.Planilla.Estado == PlanillaEstado.Borrador || l.Planilla.Estado == PlanillaEstado.ConAlertasCuenta)
+                        && ResultadosAlerta.Contains(l.ResultadoCuenta) && !l.AlertaCuentaResuelta)
+            .Select(l => new { l.PlanillaId, l.PrestadorId }).Distinct().CountAsync();
+        BoletasPendientes = await activas
+            .Where(l => l.Planilla.Estado != PlanillaEstado.Aprobada && l.Planilla.Estado != PlanillaEstado.EnPago && l.Planilla.Estado != PlanillaEstado.Cerrada)
+            .Where(l => !db.Boletas.Any(b => b.PlanillaId == l.PlanillaId && b.PrestadorId == l.PrestadorId
+                                            && b.Estado != BoletaEstado.Reemplazada && b.Estado != BoletaEstado.Rechazada))
+            .Select(l => new { l.PlanillaId, l.PrestadorId }).Distinct().CountAsync();
         ObservacionesAbiertas = await db.Observaciones.CountAsync(o => o.LineaPago.Planilla.CicloId == Ciclo.Id && o.Estado == ObservacionEstado.Abierta);
     }
 }

@@ -116,12 +116,15 @@ public static class Flujo
     }
 
     /// <summary>R-15: cierre solo con todas las líneas del ciclo pagadas o diferidas.</summary>
-    public static Verificacion PuedeCerrar(Ciclo c)
+    public static Verificacion PuedeCerrar(Ciclo c) =>
+        PuedeCerrar(c.Estado, c.Planillas.SelectMany(p => p.Lineas).Count(l => l.Estado is not (LineaEstado.Pagada or LineaEstado.Diferida)));
+
+    /// <summary>Misma regla con el conteo hecho en la base (sin cargar las líneas del ciclo).</summary>
+    public static Verificacion PuedeCerrar(CicloEstado estado, int lineasPendientes)
     {
         var motivos = new List<string>();
-        if (c.Estado == CicloEstado.Cerrado) motivos.Add("El ciclo ya está cerrado.");
-        var pendientes = c.Planillas.SelectMany(p => p.Lineas).Count(l => l.Estado is not (LineaEstado.Pagada or LineaEstado.Diferida));
-        if (pendientes > 0) motivos.Add($"Faltan {pendientes} líneas por pagar o diferir.");
+        if (estado == CicloEstado.Cerrado) motivos.Add("El ciclo ya está cerrado.");
+        if (lineasPendientes > 0) motivos.Add($"Faltan {lineasPendientes} líneas por pagar o diferir.");
         return Verificacion.De(motivos);
     }
 

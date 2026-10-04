@@ -29,8 +29,10 @@ public class PagosModel(AppDbContext db, ContextoLayout ctx, CicloService ciclos
         Hoy = ciclos.Hoy;
         Tasa = await parametros.TasaAsync(Ciclo.Periodo.Year);
         Planillas = await db.Planillas.Include(p => p.Area).Where(p => p.CicloId == Ciclo.Id).OrderBy(p => p.Area.Nombre).ThenBy(p => p.Numero).ToListAsync();
-        var cicloCompleto = await db.Ciclos.Include(c => c.Planillas).ThenInclude(p => p.Lineas).FirstAsync(c => c.Id == Ciclo.Id);
-        Cierre = Flujo.PuedeCerrar(cicloCompleto);
+        // Conteo en la base: cargar todas las líneas del ciclo solo para contarlas era lo más lento de la página.
+        var pendientes = await db.LineasPago.IgnoreQueryFilters()
+            .CountAsync(l => l.Planilla.CicloId == Ciclo.Id && l.Estado != LineaEstado.Pagada && l.Estado != LineaEstado.Diferida);
+        Cierre = Flujo.PuedeCerrar(Ciclo.Estado, pendientes);
         Diferidas = await db.LineasPago.Include(l => l.Prestador).Include(l => l.Planilla).ThenInclude(p => p.Area)
             .Where(l => l.Planilla.CicloId == Ciclo.Id && l.Estado == LineaEstado.Diferida).OrderBy(l => l.PlanillaId).ThenBy(l => l.Numero).ToListAsync();
         var id = Planilla ?? Planillas.FirstOrDefault(p => p.Estado is PlanillaEstado.Aprobada or PlanillaEstado.EnPago)?.Id ?? Planillas.FirstOrDefault()?.Id;

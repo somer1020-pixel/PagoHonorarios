@@ -37,6 +37,7 @@
                 </tr>
             }
             @if (Model.Lista.Count == 0) { <tr><td colspan="3" class="muted">Sin resultados.</td></tr> }
+            @if (Model.Total > Model.Lista.Count) { <tr><td colspan="3" class="muted text-12">Se muestran @Model.Lista.Count de @Model.Total prestadores. Busca por nombre o RUT para encontrar el resto.</td></tr> }
             </tbody>
         </table>
     </div>

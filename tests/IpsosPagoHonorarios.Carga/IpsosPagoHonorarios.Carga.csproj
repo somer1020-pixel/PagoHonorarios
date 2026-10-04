@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pruebas de carga y estrés: genera volumen en una base SQL Server de prueba y ejecuta usuarios virtuales por HTTP. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(TfmApp)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\IpsosPagoHonorarios.Web\IpsosPagoHonorarios.Web.csproj" />
+  </ItemGroup>
+
+</Project>

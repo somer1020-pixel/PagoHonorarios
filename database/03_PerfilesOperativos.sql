@@ -1,6 +1,11 @@
-/* Perfiles CEX, Public, BHT, MSU y AUM: gestionan procesos de pago con las mismas pantallas y permisos que Operaciones.
+﻿/* Perfiles CEX, Public, BHT, MSU y AUM: gestionan procesos de pago con las mismas pantallas y permisos que Operaciones.
    Idempotente. La aplicación también los crea al iniciar; este script es opcional. */
 USE [BD_PagoIpsos];
+GO
+
+-- sqlcmd trabaja por defecto con QUOTED_IDENTIFIER OFF; los índices filtrados (p. ej. los de Identity) lo exigen ON.
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 GO
 SET NOCOUNT ON;
 IF NOT EXISTS (SELECT 1 FROM [AspNetRoles] WHERE [NormalizedName] = N'CEX')
