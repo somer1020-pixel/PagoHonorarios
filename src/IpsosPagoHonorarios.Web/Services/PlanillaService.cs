@@ -117,4 +117,54 @@ public class PlanillaService(
         await DiferirAsync(p, l.PrestadorId, motivo);
         await db.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Revierte un diferimiento: trae de vuelta las filas de un prestador desde la planilla del ciclo siguiente a la
+    /// planilla <paramref name="planillaId"/>, siempre que en el destino sigan pendientes de boleta (sin boleta ni pago).
+    /// No guarda: la reapertura de la observación y la nueva devolución las hace RevisionService en la misma transacción.
+    /// </summary>
+    public async Task<List<LineaPago>> RevertirDiferimientoAsync(int planillaId, int prestadorId, string motivo)
+    {
+        var p = await ciclos.PlanillaCompletaAsync(planillaId, todasLasAreas: true) ?? throw new ReglaException("Planilla no encontrada.");
+        CicloService.ExigirAbierto(p.Ciclo);
+        if (p.Estado is PlanillaEstado.Aprobada or PlanillaEstado.EnPago or PlanillaEstado.Cerrada)
+            throw new ReglaException("La planilla ya fue aprobada: no se puede revertir el diferimiento.");
+        var origen = p.Lineas.Where(l => l.PrestadorId == prestadorId && l.Estado == LineaEstado.Diferida).ToList();
+        if (origen.Count == 0) throw new ReglaException("Este prestador no tiene filas diferidas en esta planilla.");
+        var cicloDestinoId = origen[0].DiferidaACicloId ?? throw new ReglaException("No se encuentra el ciclo de destino del diferimiento.");
+
+        var destinos = await db.Planillas.IgnoreQueryFilters()
+            .Include(x => x.Ciclo).Include(x => x.Lineas).Include(x => x.Boletas)
+            .Where(x => x.CicloId == cicloDestinoId && x.AreaId == p.AreaId && x.Nombre == p.Nombre).ToListAsync();
+        var copiadas = destinos.SelectMany(d => d.Lineas.Where(l => l.PrestadorId == prestadorId && l.DiferidaDesdeCicloId == p.CicloId)).ToList();
+
+        // Seguridad: el destino no debe haber avanzado (ciclo abierto, planilla sin aprobar, sin boleta ni pago del prestador).
+        var destinoCiclo = destinos.FirstOrDefault()?.Ciclo;
+        if (destinoCiclo is not null && destinoCiclo.Estado != CicloEstado.Abierto)
+            throw new ReglaException($"El ciclo de destino {destinoCiclo.Codigo} ya está cerrado: no se puede revertir.");
+        foreach (var d in destinos.Where(d => d.Lineas.Any(l => l.PrestadorId == prestadorId && l.DiferidaDesdeCicloId == p.CicloId))
+                     .Where(d => d.Estado is PlanillaEstado.Aprobada or PlanillaEstado.EnPago or PlanillaEstado.Cerrada))
+            throw new ReglaException($"En el ciclo siguiente la planilla {d.Titulo} ya fue aprobada: no se puede revertir.");
+        if (copiadas.Any(l => l.Estado != LineaEstado.PendienteBoleta))
+            throw new ReglaException("En el ciclo siguiente el prestador ya avanzó (boleta o pago): no se puede revertir automáticamente.");
+        if (destinos.Any(d => d.Boletas.Any(b => b.PrestadorId == prestadorId && b.Vigente)))
+            throw new ReglaException("El prestador ya subió una boleta en el ciclo siguiente: no se puede revertir automáticamente.");
+
+        // Quitar las copias del destino y restaurar las filas de origen.
+        db.LineasPago.RemoveRange(copiadas);
+        foreach (var d in destinos) d.Lineas.RemoveAll(copiadas.Contains);
+        foreach (var l in origen) { l.Estado = LineaEstado.PendienteBoleta; l.DiferidaACicloId = null; }
+
+        // Planilla de destino que quedó vacía y se había creado por el diferimiento: se elimina para no dejar basura.
+        foreach (var d in destinos.Where(d => d.Lineas.Count == 0 && d.Estado == PlanillaEstado.Borrador && d.Boletas.Count == 0))
+            db.Planillas.Remove(d);
+
+        var prest = origen[0].Prestador;
+        auditor.Registrar(nameof(LineaPago), string.Join(",", origen.Select(l => l.Numero)), "Revertir diferimiento",
+            $"{p.Titulo} {p.Ciclo.Codigo} ← {destinoCiclo?.Codigo}: {prest?.NombreCompleto} ({motivo})");
+        if (prest is not null)
+            correos.Encolar(prest.Email, $"Tu pago vuelve al ciclo {p.Ciclo.Codigo}",
+                $"Hola {prest.NombreCompleto}: tus filas de la planilla {p.Titulo} vuelven al ciclo {p.Ciclo.Codigo}. Motivo: {motivo}.");
+        return origen;
+    }
 }

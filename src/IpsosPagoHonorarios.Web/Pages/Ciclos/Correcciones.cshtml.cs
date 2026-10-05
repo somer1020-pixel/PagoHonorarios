@@ -21,6 +21,7 @@ public class CorreccionesModel(
     public bool EsDemo => env.IsDevelopment();
     public bool PuedeOperar => Puede(Roles.Operaciones);
     public bool PuedeRevisar => Puede(Roles.Finanzas);
+    public bool EsAdmin => Puede(Roles.Admin);
 
     public async Task OnGetAsync()
     {
@@ -57,6 +58,10 @@ public class CorreccionesModel(
 
     public Task<IActionResult> OnPostDiferirAsync(int lineaId) =>
         AccionAsync(() => planillas.DiferirLineaAsync(lineaId, "diferida por Operaciones durante la corrección"), "Filas diferidas al ciclo siguiente.", Ruta, [Roles.Operaciones]);
+
+    public Task<IActionResult> OnPostRevertirDiferimientoAsync(int observacionId, string? motivo) =>
+        AccionAsync(() => revision.RevertirDiferimientoAsync(observacionId, motivo ?? ""),
+            "Diferimiento revertido: la fila volvió al ciclo y se reabrió la corrección con un nuevo plazo.", Ruta, [Roles.Admin]);
 
     /// <summary>Solo en Development: equivale al ajuste simularVencido del mockup (R-12).</summary>
     public async Task<IActionResult> OnPostSimularVencimientoAsync()

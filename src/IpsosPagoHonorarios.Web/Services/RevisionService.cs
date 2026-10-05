@@ -6,7 +6,7 @@ namespace IpsosPagoHonorarios.Web.Services;
 
 /// <summary>Revisión de Finanzas, observaciones, devolución con plazo, correcciones y aprobación (R-09 a R-13).</summary>
 public class RevisionService(
-    AppDbContext db, CicloService ciclos, Parametros parametros, Auditor auditor, Correos correos, IUsuarioActual usuario)
+    AppDbContext db, CicloService ciclos, PlanillaService planillas, Parametros parametros, Auditor auditor, Correos correos, IUsuarioActual usuario)
 {
     public async Task<Observacion> ObservarAsync(int lineaId, ObservacionTipo tipo, string campo, string detalle)
     {
@@ -148,6 +148,46 @@ public class RevisionService(
         o.Estado = ObservacionEstado.Abierta;
         o.LineaPago.Estado = LineaEstado.Observada;
         auditor.Registrar(nameof(Observacion), o.Id, "Reabrir corrección", $"Línea {o.LineaPago.Numero}");
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// El Administrador revierte un diferimiento de corrección: trae la fila de vuelta desde el ciclo siguiente, reabre
+    /// las observaciones vencidas del prestador y abre una nueva devolución con plazo fresco para que Operaciones pueda
+    /// corregir y reenviar. Exige motivo (queda en la bitácora).
+    /// </summary>
+    public async Task RevertirDiferimientoAsync(int observacionId, string motivo)
+    {
+        if (usuario.Principal is { } pr && !pr.IsInRole(Roles.Admin))
+            throw new ReglaException("Solo el Administrador puede revertir un diferimiento.");
+        if (string.IsNullOrWhiteSpace(motivo)) throw new ReglaException("Indica el motivo de la reversa.");
+        var o = await db.Observaciones.Include(x => x.LineaPago)
+                    .FirstOrDefaultAsync(x => x.Id == observacionId) ?? throw new ReglaException("Observación no encontrada.");
+        if (o.Estado != ObservacionEstado.Vencida) throw new ReglaException("Solo se revierte una observación con el plazo vencido (diferida).");
+        var planillaId = o.LineaPago.PlanillaId;
+        var prestadorId = o.LineaPago.PrestadorId;
+
+        var restauradas = await planillas.RevertirDiferimientoAsync(planillaId, prestadorId, motivo.Trim());
+        var ids = restauradas.Select(l => l.Id).ToHashSet();
+
+        var p = await ciclos.PlanillaCompletaAsync(planillaId, todasLasAreas: true)
+                ?? throw new ReglaException("Planilla no encontrada.");
+        var vencidas = await db.Observaciones.Include(x => x.LineaPago)
+            .Where(x => x.LineaPago.PlanillaId == planillaId && x.LineaPago.PrestadorId == prestadorId && x.Estado == ObservacionEstado.Vencida)
+            .ToListAsync();
+        var par = await parametros.ObtenerAsync();
+        var ahora = ciclos.AhoraUtc;
+        var d = new Devolucion
+        {
+            PlanillaId = planillaId, Version = p.Version, DevueltaEn = ahora, DevueltaPor = usuario.Nombre,
+            VenceEn = Flujo.Vencimiento(ahora, par.PlazoCorreccionMinutos)
+        };
+        db.Devoluciones.Add(d);
+        foreach (var ob in vencidas) { ob.Estado = ObservacionEstado.Abierta; ob.Devolucion = d; }
+        foreach (var l in p.Lineas.Where(l => ids.Contains(l.Id))) l.Estado = LineaEstado.Observada;
+        p.Estado = PlanillaEstado.Observada;
+        auditor.Registrar(nameof(Planilla), p.Id, "Revertir diferimiento",
+            $"{p.Titulo} v{p.Version}: {vencidas.Count} observaciones reabiertas; nueva devolución vence {Formato.FechaHora(d.VenceEn)} (motivo: {motivo.Trim()})");
         await db.SaveChangesAsync();
     }
 

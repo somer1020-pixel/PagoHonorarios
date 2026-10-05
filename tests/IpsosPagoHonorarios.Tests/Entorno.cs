@@ -55,7 +55,7 @@ public sealed class Entorno : IDisposable
         Cuentas = new CuentasService(Db, Ciclos, Auditor, Correos, Usuario);
         Boletas = new BoletaService(Db, Ciclos, Parametros, Archivos, Auditor, Correos, Usuario);
         Produccion = new ProduccionService(Db, Ciclos, Parametros, Cuentas, Boletas, Archivos, Auditor, Correos);
-        Revision = new RevisionService(Db, Ciclos, Parametros, Auditor, Correos, Usuario);
+        Revision = new RevisionService(Db, Ciclos, Planillas, Parametros, Auditor, Correos, Usuario);
         Plazos = new PlazosService(Db, Ciclos, Planillas, Auditor, Correos);
         Pagos = new PagoService(Db, Ciclos, Parametros, Archivos, Auditor, Correos, Usuario);
         Portal = new PortalService(Db, Parametros);

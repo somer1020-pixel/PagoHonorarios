@@ -241,6 +241,57 @@ public class RevisionYPagoTests
     }
 
     [Fact]
+    public async Task RevertirDiferimiento_SoloAdmin_TraeLaFilaDeVueltaYReabreLaCorreccion()
+    {
+        using var f = await new F2F().CargarAsync(boletaFrancisca: false);
+        f.P.Estado = PlanillaEstado.EnRevision;
+        await f.E.Db.SaveChangesAsync();
+        var lfra = f.P.Lineas.Single(l => l.PrestadorId == f.Fra.Id);
+        var lval = f.P.Lineas.Single(l => l.PrestadorId == f.Val.Id);
+        await f.E.Revision.ObservarAsync(lfra.Id, ObservacionTipo.FaltaBoleta, "N° boleta", "Sin boleta.");
+        await f.E.Revision.ObservarAsync(lval.Id, ObservacionTipo.DiferenciaMontos, "Monto boleta", "Diferencia.");
+        await f.E.Revision.DevolverAsync(f.P.Id);
+        f.E.Reloj.Advance(TimeSpan.FromMinutes(60));
+        Assert.Equal(1, await f.E.Plazos.ProcesarVencidasAsync());
+
+        var obsFra = await f.E.Db.Observaciones.Include(o => o.LineaPago).SingleAsync(o => o.LineaPago.PrestadorId == f.Fra.Id);
+        Assert.Equal(ObservacionEstado.Vencida, obsFra.Estado);
+
+        System.Security.Claims.ClaimsPrincipal Como(string rol) => new(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, rol)], "prueba"));
+
+        // Operaciones no puede revertir.
+        f.E.Usuario.Principal = Como(Roles.Operaciones);
+        var ex = await Assert.ThrowsAsync<ReglaException>(() => f.E.Revision.RevertirDiferimientoAsync(obsFra.Id, "me equivoqué"));
+        Assert.Contains("Administrador", ex.Message);
+
+        // El Administrador exige motivo.
+        f.E.Como("Admin");
+        f.E.Usuario.Principal = Como(Roles.Admin);
+        await Assert.ThrowsAsync<ReglaException>(() => f.E.Revision.RevertirDiferimientoAsync(obsFra.Id, "  "));
+
+        // Revierte: la fila de Francisca vuelve, la observación se reabre y hay una nueva devolución con plazo.
+        await f.E.Revision.RevertirDiferimientoAsync(obsFra.Id, "corrección trivial, se paga este mes");
+
+        f.P = await f.E.RecargarAsync(f.P);
+        Assert.Equal(PlanillaEstado.Observada, f.P.Estado);
+        var fraRe = f.P.Lineas.Single(l => l.Id == lfra.Id);
+        Assert.Equal(LineaEstado.Observada, fraRe.Estado);
+        Assert.Null(fraRe.DiferidaACicloId);
+        Assert.Equal(LineaEstado.Diferida, f.P.Lineas.Single(l => l.Id == lval.Id).Estado);   // Valentina sigue diferida
+
+        var obsRe = await f.E.Db.Observaciones.Include(o => o.LineaPago).SingleAsync(o => o.LineaPago.PrestadorId == f.Fra.Id);
+        Assert.Equal(ObservacionEstado.Abierta, obsRe.Estado);
+        var dev = await f.E.Db.Devoluciones.OrderByDescending(d => d.Id).FirstAsync();
+        Assert.Equal(DevolucionResultado.Pendiente, dev.Resultado);
+        Assert.True(dev.VenceEn > f.E.Reloj.GetUtcNow().UtcDateTime);
+
+        // En NOV queda solo la fila de Valentina (180.000); la de Francisca (331.500) se quitó.
+        var nov = await f.E.Db.Planillas.Include(p => p.Ciclo).Include(p => p.Lineas).SingleAsync(p => p.Ciclo.Codigo == "NOV-2026");
+        Assert.Equal([180000m], nov.Lineas.Select(l => l.ValorTotalBruto).Order());
+    }
+
+    [Fact]
     public async Task Correccion_PuedeCambiarJobEItem()
     {
         using var f = await new F2F().CargarAsync();

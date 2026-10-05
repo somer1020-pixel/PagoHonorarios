@@ -109,6 +109,17 @@ else
                 @if (o.Estado == ObservacionEstado.Vencida || l.Estado == LineaEstado.Diferida)
                 {
                     <div class="text-13" style="color:var(--danger)">Filas diferidas a la planilla @p.Titulo de @Model.CicloSiguiente.</div>
+                    @if (o.Estado == ObservacionEstado.Vencida && Model.EsAdmin)
+                    {
+                        <form method="post" asp-page-handler="RevertirDiferimiento" asp-route-planilla="@p.Id" class="mt-2">
+                            <input type="hidden" name="observacionId" value="@o.Id" />
+                            <label class="form-label text-12" for="rev-@o.Id">Administrador: traer la fila de vuelta a @p.Ciclo.Codigo y reabrir la corrección (requiere motivo)</label>
+                            <div class="d-flex gap-2 align-items-start">
+                                <input id="rev-@o.Id" name="motivo" class="form-control form-control-sm flex-fill" placeholder="Motivo de la reversa" required />
+                                <button class="btn btn-secondary btn-sm">Revertir diferimiento</button>
+                            </div>
+                        </form>
+                    }
                 }
                 @if (o.Respuesta is not null)
                 {
