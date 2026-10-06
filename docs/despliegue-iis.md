@@ -59,34 +59,55 @@ lleva secretos.
 - Si ya tienes la plantilla oficial de Finanzas, agrega `"Plantillas": { "PlanillaFinanzas": "D:\\...\\Planilla Finanzas.xlsx" }`.
 - Para WhatsApp, ver [`whatsapp.md`](whatsapp.md). Se puede dejar para después.
 
-## 4. IIS
+## 4. IIS y permisos
 
-En PowerShell, como administrador:
+El paquete incluye el script `instalar-iis.ps1` (queda en la carpeta `app`). Crea el grupo de aplicaciones, el sitio y
+los permisos, y se puede ejecutar más de una vez. En PowerShell, como administrador:
 
 ```powershell
-Import-Module WebAdministration
-$pool = "IpsosPagoHonorarios"
-New-WebAppPool $pool
-Set-ItemProperty IIS:\AppPools\$pool -Name managedRuntimeVersion -Value ""            # Sin código administrado
-Set-ItemProperty IIS:\AppPools\$pool -Name startMode -Value AlwaysRunning
-Set-ItemProperty IIS:\AppPools\$pool -Name processModel.idleTimeout -Value "00:00:00"  # nunca se duerme
-New-Website -Name $pool -PhysicalPath D:\IpsosPagoHonorarios\app -ApplicationPool $pool -Port 8080
-Set-ItemProperty IIS:\Sites\$pool -Name applicationDefaults.preloadEnabled -Value $true
+cd D:\IpsosPagoHonorarios\app
+powershell -ExecutionPolicy Bypass -File .\instalar-iis.ps1
 ```
 
-**¿Por qué no se debe dormir?** Dentro de la aplicación corre un proceso que revisa cada minuto los plazos de corrección
-vencidos (y, si está activo, envía los WhatsApp). Si IIS apaga el grupo de aplicaciones por inactividad (20 minutos por
-defecto), esos procesos se detienen hasta la siguiente visita.
+(`-ExecutionPolicy Bypass` evita el bloqueo de Windows a los scripts que vienen de un zip descargado.) Por defecto usa
+`D:\IpsosPagoHonorarios` y el puerto **8080**; se cambian con `-Raiz` y `-Puerto`.
 
-## 5. Permisos
+Lo que hace:
+
+- **Grupo de aplicaciones** `IpsosPagoHonorarios`: sin código administrado, `AlwaysRunning` y sin tiempo de inactividad.
+  **No debe dormirse**: dentro de la aplicación corre un proceso que revisa cada minuto los plazos de corrección vencidos
+  (y, si está activo, envía los WhatsApp). Si IIS lo apaga por inactividad (20 minutos por defecto), se detiene hasta la
+  siguiente visita.
+- **Sitio** `IpsosPagoHonorarios` en el puerto 8080, con precarga activada.
+- **Permisos** para `IIS AppPool\IpsosPagoHonorarios`: lectura en `app`, escritura en `app\logs` y `archivos`, y
+  `appsettings.Production.json` visible solo para administradores y la aplicación. Si ese archivo aún no existe, crea el
+  paso 3 y vuelve a ejecutar el script.
+
+### Si tu consola pega todo en una sola línea
+
+Algunas consolas remotas pierden los saltos de línea al pegar y PowerShell entiende todo como un único comando (el error
+típico es *"Cannot bind parameter because parameter 'Name' is specified more than once"*). Estas líneas terminan en `;`,
+así que funcionan pegadas de una vez o una por una:
 
 ```powershell
-$id = "IIS AppPool\IpsosPagoHonorarios"
-icacls D:\IpsosPagoHonorarios\app      /grant "${id}:(OI)(CI)RX"
-icacls D:\IpsosPagoHonorarios\app\logs /grant "${id}:(OI)(CI)M"
-icacls D:\IpsosPagoHonorarios\archivos /grant "${id}:(OI)(CI)M"
-# El archivo con secretos: solo administradores y la aplicación
-icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /grant "Administrators:F" "${id}:R"
+Import-Module WebAdministration;
+$pool = "IpsosPagoHonorarios";
+New-WebAppPool $pool;
+Set-ItemProperty IIS:\AppPools\$pool -Name managedRuntimeVersion -Value "";
+Set-ItemProperty IIS:\AppPools\$pool -Name startMode -Value AlwaysRunning;
+Set-ItemProperty IIS:\AppPools\$pool -Name processModel.idleTimeout -Value ([TimeSpan]::Zero);
+New-Website -Name $pool -PhysicalPath D:\IpsosPagoHonorarios\app -ApplicationPool $pool -Port 8080;
+Set-ItemProperty IIS:\Sites\$pool -Name applicationDefaults.preloadEnabled -Value $true;
+```
+
+## 5. Permisos (solo si no usaste el script)
+
+```powershell
+$id = "IIS AppPool\IpsosPagoHonorarios";
+icacls D:\IpsosPagoHonorarios\app /grant "${id}:(OI)(CI)RX";
+icacls D:\IpsosPagoHonorarios\app\logs /grant "${id}:(OI)(CI)M";
+icacls D:\IpsosPagoHonorarios\archivos /grant "${id}:(OI)(CI)M";
+icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /grant "Administrators:F" "${id}:R";
 ```
 
 ## 6. Primera prueba
@@ -103,7 +124,7 @@ icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /gr
 ### Si no abre
 
 - **HTTP 500.30 / 502**: en `web.config`, cambia `stdoutLogEnabled="false"` a `"true"` y revisa `app\logs\stdout_*.log`.
-  Causas típicas: Hosting Bundle sin instalar (o sin `iisreset`), cadena de conexión incorrecta, o permisos del paso 5.
+  Causas típicas: Hosting Bundle sin instalar (o sin `iisreset`), cadena de conexión incorrecta, o permisos (pasos 4 y 5).
 - **Error al conectar con SQL**: prueba el mismo usuario y clave con `sqlcmd -S AMCLSANSQL9 -U user_sql -d BD_PagoIpsos`.
 - **Dice que falta una tabla o columna**: falta aplicar las migraciones (paso 1) o `user_sql` no tiene `db_ddladmin`.
 

@@ -39,6 +39,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Publicar para IIS
         run: dotnet publish src/IpsosPagoHonorarios.Web/IpsosPagoHonorarios.Web.csproj -c Release -o publish
+      - name: Script de instalación en IIS (va dentro del paquete)
+        run: Copy-Item deploy/instalar-iis.ps1 publish/
       - name: Script de migraciones (idempotente) para SQL Server
         # dotnet ef usa por defecto el ambiente Development (SQLite, que no admite scripts idempotentes): se fuerza Production (SQL Server).
         env:
