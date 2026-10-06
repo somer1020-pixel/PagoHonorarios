@@ -123,6 +123,29 @@ icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /gr
 
 ### Si no abre
 
+- **HTTP 500.19, código `0x8007000d`** (IIS no puede leer el `web.config`): casi siempre falta el **módulo de ASP.NET Core**,
+  que instala el Hosting Bundle. Compruébalo en PowerShell:
+
+  ```powershell
+  Test-Path "$env:ProgramFiles\IIS\Asp.Net Core Module\V2\aspnetcorev2.dll";
+  Import-Module WebAdministration; Get-WebGlobalModule | Where-Object Name -like "AspNetCore*";
+  dotnet --list-runtimes;
+  ```
+
+  Debe mostrar `True`, el módulo `AspNetCoreModuleV2` y los runtimes `Microsoft.AspNetCore.App 10.0.x` y
+  `Microsoft.NETCore.App 10.0.x`. Si falta algo, instala el **Hosting Bundle de .NET 10** (en
+  https://dotnet.microsoft.com/download/dotnet/10.0, sección ASP.NET Core Runtime → *Hosting Bundle*) y reinicia IIS:
+  `net stop was /y; net start w3svc`. Si ya estaba instalado antes que IIS, vuelve a ejecutar el instalador y elige
+  *Reparar*.
+- **Windows Server 2012 / 2012 R2** (IIS 8.5): .NET 10 los admite, con actualizaciones de seguridad extendidas (ESU). Antes
+  de instalar el Hosting Bundle, instala las actualizaciones de Windows pendientes (en particular el *Universal C Runtime*,
+  KB2999226) y *Visual C++ Redistributable 2015-2022 (x64)*. En estas versiones **no existe el OCR de Windows**, así que
+  la lectura de boletas sin texto necesita Tesseract (ver abajo).
+- **500.19 con el módulo ya instalado**: comprueba que el archivo sea XML válido con
+  `[xml](Get-Content D:\IpsosPagoHonorarios\app\web.config) | Out-Null` (no debe mostrar errores) y que no esté vacío o
+  truncado (el `web.config` original pesa unos 400 bytes). Revisa también el Visor de eventos → Registros de Windows →
+  Sistema / Aplicación.
+
 - **HTTP 500.30 / 502**: en `web.config`, cambia `stdoutLogEnabled="false"` a `"true"` y revisa `app\logs\stdout_*.log`.
   Causas típicas: Hosting Bundle sin instalar (o sin `iisreset`), cadena de conexión incorrecta, o permisos (pasos 4 y 5).
 - **Error al conectar con SQL**: prueba el mismo usuario y clave con `sqlcmd -S AMCLSANSQL9 -U user_sql -d BD_PagoIpsos`.
@@ -130,8 +153,8 @@ icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /gr
 
 ### OCR en el servidor
 
-La lectura de boletas sin texto (PDF compartidos desde la app del SII) usa primero el OCR de Windows y, si no está
-disponible, Tesseract. **No se probó en Windows Server con la identidad del grupo de aplicaciones**: confírmalo con
+La lectura de boletas sin texto (PDF compartidos desde la app del SII) usa primero el OCR de Windows (solo Windows 10 /
+Server 2016 o superior) y, si no está disponible, Tesseract. Las boletas con texto no necesitan OCR. **No se probó en Windows Server con la identidad del grupo de aplicaciones**: confírmalo con
 *Probar OCR*. Si falla, prueba con **Cargar perfil de usuario = True** en la configuración avanzada del grupo de
 aplicaciones y, si sigue fallando, instala Tesseract y configura `Ocr:Tesseract` y `Ocr:Tessdata` (ver README).
 
