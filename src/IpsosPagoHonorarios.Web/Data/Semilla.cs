@@ -38,15 +38,27 @@ public class Semilla(AppDbContext db, RoleManager<IdentityRole> roles, UserManag
         {
             var u = new Usuario { UserName = adminEmail, Email = adminEmail, EmailConfirmed = true, NombreCompleto = "Administrador", LockoutEnabled = true };
             var res = await users.CreateAsync(u, adminPass);
-            if (res.Succeeded) await users.AddToRoleAsync(u, Roles.Admin);
-            else log.LogWarning("No se creó el administrador: {E}", string.Join(" ", res.Errors.Select(e => e.Description)));
+            if (res.Succeeded)
+            {
+                await users.AddToRoleAsync(u, Roles.Admin);
+                log.LogInformation("Administrador creado: {Email}. Ingrese con ese correo y la contraseña de Semilla:AdminPassword.", adminEmail);
+            }
+            else
+                log.LogWarning("No se creó el administrador: {E} Corrija Semilla:AdminPassword (mínimo 8 caracteres, una minúscula y un número) y reinicie la aplicación.",
+                    string.Join(" ", res.Errors.Select(e => e.Description)));
         }
+        else if ((string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPass)) && (await users.GetUsersInRoleAsync(Roles.Admin)).Count == 0)
+            log.LogWarning("No hay ningún usuario administrador y no están configurados Semilla:AdminEmail y Semilla:AdminPassword: nadie podrá ingresar. " +
+                           "Defínalos en appsettings.Production.json y reinicie la aplicación.");
     }
 
     private async Task CargarAsync<T>(string ruta, DbSet<T> set, Func<string[], T> crear, Func<T, string> clave) where T : class
     {
         if (!File.Exists(ruta)) { log.LogWarning("No existe la semilla {Ruta}", ruta); return; }
-        var existentes = (await set.ToListAsync()).Select(clave).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // Solo en una tabla vacía: si ya hay catálogo (script SQL o mantención en Maestros) no se toca, para no devolver
+        // entradas que se renombraron o se borraron a propósito.
+        if (await set.AnyAsync()) return;
+        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lineas = await File.ReadAllLinesAsync(ruta, Encoding.UTF8);
         foreach (var l in lineas.Skip(1).Where(l => !string.IsNullOrWhiteSpace(l)))
         {

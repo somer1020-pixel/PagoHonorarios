@@ -25,6 +25,8 @@
           Link="x64\tesseract.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Ocr\boleta_prueba_ficticia.pdf" LogicalName="BoletaPruebaOcr.pdf" />
     <None Update="Ocr\tessdata\*.traineddata" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Catálogos iniciales (se cargan solo en tablas vacías). Sin esto la publicación no los trae. -->
+    <None Update="Data\Semilla\*.csv" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>
