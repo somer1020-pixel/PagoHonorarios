@@ -40,6 +40,9 @@ jobs:
       - name: Publicar para IIS
         run: dotnet publish src/IpsosPagoHonorarios.Web/IpsosPagoHonorarios.Web.csproj -c Release -o publish
       - name: Script de migraciones (idempotente) para SQL Server
+        # dotnet ef usa por defecto el ambiente Development (SQLite, que no admite scripts idempotentes): se fuerza Production (SQL Server).
+        env:
+          ASPNETCORE_ENVIRONMENT: Production
         run: |
           dotnet tool restore
           dotnet ef migrations script --idempotent -p src/IpsosPagoHonorarios.Web -o publish/migraciones.sql
