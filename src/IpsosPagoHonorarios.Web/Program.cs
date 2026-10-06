@@ -109,7 +109,15 @@ builder.Services.Configure<OpcionesPlantillas>(cfg.GetSection("Plantillas"));
 builder.Services.Configure<OpcionesPublicacion>(cfg.GetSection("Publicacion"));
 builder.Services.Configure<OpcionesTurnstile>(cfg.GetSection("Turnstile"));
 builder.Services.Configure<OpcionesWhatsApp>(cfg.GetSection("WhatsApp"));
-builder.Services.AddHttpClient<IProveedorWhatsApp, ProveedorWhatsAppMeta>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient<ProveedorWhatsAppMeta>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient<ProveedorWhatsAppTwilio>(c => c.Timeout = TimeSpan.FromSeconds(20));
+{
+    var wa = cfg.GetSection("WhatsApp").Get<OpcionesWhatsApp>() ?? new();
+    if (wa.Habilitado && !wa.ProveedorValido)
+        throw new InvalidOperationException($"WhatsApp:Proveedor “{wa.Proveedor}” no es válido: use Meta o Twilio.");
+    if (wa.UsaTwilio) builder.Services.AddTransient<IProveedorWhatsApp>(sp => sp.GetRequiredService<ProveedorWhatsAppTwilio>());
+    else builder.Services.AddTransient<IProveedorWhatsApp>(sp => sp.GetRequiredService<ProveedorWhatsAppMeta>());
+}
 builder.Services.AddScoped<EnviadorWhatsApp>();
 builder.Services.AddSingleton<Almacenamiento>();
 builder.Services.AddHttpClient<Turnstile>();

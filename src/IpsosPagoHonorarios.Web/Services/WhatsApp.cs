@@ -15,6 +15,9 @@ namespace IpsosPagoHonorarios.Web.Services;
 public class OpcionesWhatsApp
 {
     public bool Habilitado { get; set; }
+    /// <summary>Quién entrega los mensajes: "Meta" (API Cloud directa) o "Twilio".</summary>
+    public string Proveedor { get; set; } = "Meta";
+    public OpcionesTwilio Twilio { get; set; } = new();
     public string UrlBase { get; set; } = "https://graph.facebook.com";
     public string ApiVersion { get; set; } = "v21.0";
     /// <summary>Identificador del número de teléfono de WhatsApp Business (no es el número en sí).</summary>
@@ -28,7 +31,30 @@ public class OpcionesWhatsApp
     public string PlantillaRecordatorio { get; set; } = "recordatorio_boleta";
     public string PlantillaObservada { get; set; } = "boleta_observada";
 
-    public bool Configurado => !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
+    public bool UsaTwilio => string.Equals(Proveedor, "Twilio", StringComparison.OrdinalIgnoreCase);
+    public bool ProveedorValido => UsaTwilio || string.Equals(Proveedor, "Meta", StringComparison.OrdinalIgnoreCase);
+
+    public bool Configurado => UsaTwilio ? Twilio.Configurado : !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
+}
+
+/// <summary>
+/// WhatsApp a través de Twilio con un número propio aprobado. Las plantillas se crean y aprueban en Twilio (Content Template
+/// Builder) y se identifican por su Content SID (HX…): <see cref="ContentSids"/> relaciona el nombre de cada plantilla de la
+/// aplicación (p. ej. solicitud_boleta) con su Content SID. El Auth Token es un secreto: va fuera del repositorio.
+/// </summary>
+public class OpcionesTwilio
+{
+    public string UrlBase { get; set; } = "https://api.twilio.com";
+    public string? AccountSid { get; set; }
+    public string? AuthToken { get; set; }
+    /// <summary>Número de WhatsApp aprobado en Twilio, p. ej. +56912345678 (o whatsapp:+56912345678).</summary>
+    public string? From { get; set; }
+    /// <summary>Alternativa a From: un Messaging Service (MG…) que tenga el número de WhatsApp en su remitente.</summary>
+    public string? MessagingServiceSid { get; set; }
+    public Dictionary<string, string> ContentSids { get; set; } = new();
+
+    public bool Configurado => !string.IsNullOrWhiteSpace(AccountSid) && !string.IsNullOrWhiteSpace(AuthToken)
+                               && (!string.IsNullOrWhiteSpace(From) || !string.IsNullOrWhiteSpace(MessagingServiceSid));
 }
 
 public sealed record ResultadoEnvio(bool Ok, string? ProveedorId, string? Error, bool Reintentable);
@@ -103,6 +129,78 @@ public class ProveedorWhatsAppMeta(HttpClient http, IOptions<OpcionesWhatsApp> o
             var cod = e.TryGetProperty("code", out var c) && c.TryGetInt32(out var n) ? n : (int?)null;
             var det = e.TryGetProperty("error_data", out var ed) && ed.TryGetProperty("details", out var dt) ? dt.GetString() : null;
             var t = $"HTTP {http}" + (cod is null ? "" : $" (código {cod})") + (msg is null ? "" : $": {msg}") + (det is null ? "" : $" — {det}");
+            return t.Length > 450 ? t[..450] : t;
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return $"HTTP {http}"; }
+    }
+}
+
+/// <summary>Envío por la API de mensajes de Twilio (WhatsApp con plantilla de contenido aprobada).</summary>
+public class ProveedorWhatsAppTwilio(HttpClient http, IOptions<OpcionesWhatsApp> op) : IProveedorWhatsApp
+{
+    public async Task<ResultadoEnvio> EnviarPlantillaAsync(string para, string plantilla, IReadOnlyList<string> parametros, CancellationToken ct = default)
+    {
+        var t = op.Value.Twilio;
+        if (!t.Configurado) return new(false, null, "Twilio no está configurado: faltan AccountSid, AuthToken o el número de origen (From / MessagingServiceSid).", false);
+        if (!t.ContentSids.TryGetValue(plantilla, out var contentSid) || string.IsNullOrWhiteSpace(contentSid))
+            return new(false, null, $"Twilio: falta el Content SID de la plantilla “{plantilla}” (WhatsApp:Twilio:ContentSids).", false);
+
+        var campos = new List<KeyValuePair<string, string>>
+        {
+            new("To", "whatsapp:+" + para.TrimStart('+')),
+            new("ContentSid", contentSid.Trim()),
+            new("ContentVariables", JsonSerializer.Serialize(parametros.Select((v, i) => (Clave: (i + 1).ToString(), Valor: v)).ToDictionary(x => x.Clave, x => x.Valor)))
+        };
+        if (!string.IsNullOrWhiteSpace(t.MessagingServiceSid)) campos.Add(new("MessagingServiceSid", t.MessagingServiceSid.Trim()));
+        else campos.Add(new("From", Origen(t.From!)));
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, $"{t.UrlBase.TrimEnd('/')}/2010-04-01/Accounts/{Uri.EscapeDataString(t.AccountSid!.Trim())}/Messages.json")
+        {
+            Content = new FormUrlEncodedContent(campos)
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{t.AccountSid!.Trim()}:{t.AuthToken!.Trim()}")));
+        try
+        {
+            using var resp = await http.SendAsync(req, ct);
+            var texto = await resp.Content.ReadAsStringAsync(ct);
+            var codigo = (int)resp.StatusCode;
+            if (resp.IsSuccessStatusCode) return new(true, Sid(texto), null, false);
+            return new(false, null, ErrorDe(texto, codigo), codigo == 429 || codigo >= 500);
+        }
+        catch (HttpRequestException ex)
+        {
+            return new(false, null, "Sin conexión con Twilio: " + ex.Message, true);
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new(false, null, "Twilio no respondió a tiempo.", true);
+        }
+    }
+
+    /// <summary>"+56 9 1234 5678" o "56912345678" → "whatsapp:+56912345678"; si ya trae "whatsapp:" se respeta.</summary>
+    internal static string Origen(string from)
+    {
+        var f = from.Trim();
+        if (f.StartsWith("whatsapp:", StringComparison.OrdinalIgnoreCase)) return f;
+        return "whatsapp:+" + new string(f.Where(char.IsAsciiDigit).ToArray());
+    }
+
+    private static string? Sid(string json)
+    {
+        try { using var d = JsonDocument.Parse(json); return d.RootElement.GetProperty("sid").GetString(); }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return null; }
+    }
+
+    /// <summary>Error de Twilio: "HTTP 400 (código 21211): El número 'Para' no es válido".</summary>
+    internal static string ErrorDe(string json, int http)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(json);
+            var r = d.RootElement;
+            var msg = r.TryGetProperty("message", out var m) ? m.GetString() : null;
+            var cod = r.TryGetProperty("code", out var c) && c.TryGetInt32(out var n) ? n : (int?)null;
+            var t = $"HTTP {http}" + (cod is null ? "" : $" (código {cod})") + (msg is null ? "" : $": {msg}");
             return t.Length > 450 ? t[..450] : t;
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return $"HTTP {http}"; }

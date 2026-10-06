@@ -1,8 +1,14 @@
 # Avisos por WhatsApp
 
-La aplicación puede avisar por WhatsApp a los prestadores cuando deben subir su boleta. Usa la **API de WhatsApp
-Business (Cloud API de Meta)**. WhatsApp solo permite iniciar una conversación con **plantillas** aprobadas
-previamente por Meta, y solo con personas que dieron su consentimiento; la aplicación respeta ambas reglas.
+La aplicación puede avisar por WhatsApp a los prestadores cuando deben subir su boleta. Puede enviarlos de dos formas,
+que se elige con `WhatsApp:Proveedor`:
+
+- **`Twilio`**: a través de Twilio, con un número de WhatsApp propio aprobado en Twilio.
+- **`Meta`** (valor por defecto): directo con la API de WhatsApp Business (Cloud API de Meta).
+
+En ambos casos WhatsApp solo permite iniciar una conversación con **plantillas** aprobadas, y solo con personas que
+dieron su consentimiento; la aplicación respeta ambas reglas. Todo lo demás (cuándo se avisa, consentimiento,
+reintentos, pantalla de seguimiento) funciona igual con cualquiera de los dos.
 
 ## Cuándo se envía
 
@@ -36,7 +42,54 @@ WhatsApp exige consentimiento previo. Hay dos formas de registrarlo, y ambas gua
 
 La tarjeta del portal solo aparece cuando el canal está activado.
 
-## Puesta en marcha
+## Puesta en marcha con Twilio
+
+Requisitos: una cuenta de Twilio con tu **número de WhatsApp aprobado** (WhatsApp Sender) y plantillas aprobadas.
+
+1. **Credenciales.** En la consola de Twilio, copia el **Account SID** (`AC…`) y el **Auth Token**.
+2. **Plantillas.** En Twilio, **Content Template Builder**, crea las tres plantillas de abajo (tipo *Text*, categoría
+   **Utility**, idioma Español) con el texto indicado en la sección de Meta. En Twilio las variables se escriben
+   `{{1}}`, `{{2}}`… igual que ahí. Envíalas a aprobación de WhatsApp y, cuando estén aprobadas, anota el **Content SID**
+   (`HX…`) de cada una.
+3. **Configuración del servidor**, en `appsettings.Production.json` (ignorado por git) o variables de entorno.
+   **El Auth Token es un secreto: nunca al repositorio.**
+
+   ```json
+   "WhatsApp": {
+     "Habilitado": true,
+     "Proveedor": "Twilio",
+     "Twilio": {
+       "AccountSid": "<AC…>",
+       "AuthToken": "<token>",
+       "From": "+56912345678",
+       "ContentSids": {
+         "solicitud_boleta": "<HX…>",
+         "recordatorio_boleta": "<HX…>",
+         "boleta_observada": "<HX…>"
+       }
+     }
+   }
+   ```
+
+   - `From` es tu número de WhatsApp aprobado en Twilio (con o sin `whatsapp:`). Si prefieres un *Messaging Service*,
+     usa `"MessagingServiceSid": "<MG…>"` en lugar de `From`.
+   - Las claves de `ContentSids` son los nombres de plantilla de la aplicación (`PlantillaSolicitud`,
+     `PlantillaRecordatorio` y `PlantillaObservada`); el valor es el Content SID de Twilio. Una plantilla sin Content
+     SID falla con un error claro y no se reintenta.
+   - Con variables de entorno: `WhatsApp__Proveedor=Twilio`, `WhatsApp__Twilio__AuthToken=…`,
+     `WhatsApp__Twilio__ContentSids__solicitud_boleta=HX…`.
+4. **Reiniciar la aplicación** y entrar como Administrador a **Maestros → Parámetros → Avisos por WhatsApp**: debe decir
+   *Activado* y *Proveedor: Twilio*. Usa **Enviar prueba** con tu celular. Un `Proveedor` mal escrito detiene el
+   arranque con un mensaje que lo indica.
+
+Cómo trabaja con Twilio: la aplicación envía el mensaje y Twilio responde que lo **aceptó** (queda en estado
+`queued`). Si WhatsApp lo rechaza después (número sin WhatsApp, plantilla no aprobada, destinatario que bloqueó), ese
+fallo no llega a la aplicación: se ve en el **registro de mensajes de la consola de Twilio**. Esa respuesta de Twilio
+queda guardada en la bandeja como el identificador del mensaje (`SM…`), para buscarlo allí. Errores frecuentes de
+Twilio: `21211` número de destino inválido · `63016` plantilla no aprobada o fuera de la ventana de conversación ·
+`63007` el número de origen no está habilitado para WhatsApp · `20003` credenciales inválidas.
+
+## Puesta en marcha con Meta
 
 1. **Cuenta de Meta.** Cuenta de Meta Business (idealmente con el negocio verificado) y una app en
    [Meta for Developers](https://developers.facebook.com) con el producto **WhatsApp**. Asocia un número de teléfono
@@ -95,12 +148,13 @@ no coincide · `131026` el número no tiene WhatsApp · `190` el token venció o
 
 ## Consideraciones
 
-- **Costo.** Meta cobra por mensaje según su tarifa vigente y la categoría de la plantilla. Revisa la tarifa para Chile
-  antes de activar el canal.
+- **Costo.** Se paga por mensaje según la categoría de la plantilla: la tarifa de Meta y, con Twilio, además la de
+  Twilio por mensaje. Revisa las tarifas para Chile antes de activar el canal.
 - **Límites.** Meta limita cuántos destinatarios distintos puede recibir un número por día, y el límite parte bajo y
   sube con el uso y la verificación del negocio. Un día de punta con muchos prestadores puede superarlo: los mensajes
   excedidos fallan con error, quedan registrados y los prestadores igual reciben el correo.
 - **Calidad del número.** Si los prestadores bloquean o reportan los mensajes, Meta puede reducir el límite del número.
   Por eso solo se escribe a quien autorizó y solo con avisos de la boleta.
-- **Pruebas.** El envío se probó con pruebas automáticas y contra un servidor que imita la API de Meta (formato de la
-  solicitud, reintentos y errores). La primera conexión con Meta real se valida con **Enviar prueba**.
+- **Pruebas.** El envío, con ambos proveedores, se probó con pruebas automáticas y contra servidores que imitan las API
+  de Meta y de Twilio (formato de la solicitud, autenticación, reintentos y errores). La primera conexión real se
+  valida con **Enviar prueba**.

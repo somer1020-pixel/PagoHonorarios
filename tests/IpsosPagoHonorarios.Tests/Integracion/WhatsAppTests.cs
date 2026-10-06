@@ -327,6 +327,133 @@ public class WhatsAppTests
         Assert.Equal(0, m.Llamadas);
     }
 
+    // ---- Contrato HTTP con Twilio ----
+
+    private static ProveedorWhatsAppTwilio Twilio(Manejador m, Action<OpcionesTwilio>? ajustar = null)
+    {
+        var t = new OpcionesTwilio
+        {
+            AccountSid = "AC123", AuthToken = "secreto-twilio", From = "+56 9 8888 7777",
+            ContentSids = { ["solicitud_boleta"] = "HXabc123" }
+        };
+        ajustar?.Invoke(t);
+        return new(new HttpClient(m), Options.Create(new OpcionesWhatsApp { Proveedor = "Twilio", Twilio = t }));
+    }
+
+    [Fact]
+    public async Task Twilio_EnviaLaPlantillaPorContentSidConVariablesNumeradas()
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.Created, """{"sid":"SM9f8e7d","status":"queued"}"""));
+        var r = await Twilio(m).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana", "OCT-2026", "$100.000", "10-11-2026"]);
+
+        Assert.True(r.Ok);
+        Assert.Equal("SM9f8e7d", r.ProveedorId);
+        Assert.Equal("https://api.twilio.com/2010-04-01/Accounts/AC123/Messages.json", m.Url);
+        Assert.Equal("Basic " + Convert.ToBase64String("AC123:secreto-twilio"u8.ToArray()), m.Autorizacion);
+        var f = System.Web.HttpUtility.ParseQueryString(m.Cuerpo!);
+        Assert.Equal("whatsapp:+56912345678", f["To"]);
+        Assert.Equal("whatsapp:+56988887777", f["From"]);
+        Assert.Equal("HXabc123", f["ContentSid"]);
+        Assert.Null(f["MessagingServiceSid"]);
+        Assert.Null(f["Body"]);   // una plantilla no lleva texto libre
+        using var vars = JsonDocument.Parse(f["ContentVariables"]!);
+        Assert.Equal(["1", "2", "3", "4"], vars.RootElement.EnumerateObject().Select(x => x.Name).ToArray());
+        Assert.Equal(["Ana", "OCT-2026", "$100.000", "10-11-2026"], vars.RootElement.EnumerateObject().Select(x => x.Value.GetString()!).ToArray());
+    }
+
+    [Fact]
+    public async Task Twilio_ConMessagingService_UsaEseRemitente()
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.Created, """{"sid":"SM1"}"""));
+        await Twilio(m, t => { t.From = null; t.MessagingServiceSid = "MGabc"; }).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        var f = System.Web.HttpUtility.ParseQueryString(m.Cuerpo!);
+        Assert.Equal("MGabc", f["MessagingServiceSid"]);
+        Assert.Null(f["From"]);
+    }
+
+    [Theory]
+    [InlineData("+56 9 8888 7777", "whatsapp:+56988887777")]
+    [InlineData("56988887777", "whatsapp:+56988887777")]
+    [InlineData("whatsapp:+14155238886", "whatsapp:+14155238886")]
+    public async Task Twilio_NormalizaElNumeroDeOrigen(string from, string esperado)
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.Created, """{"sid":"SM1"}"""));
+        await Twilio(m, t => t.From = from).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.Equal(esperado, System.Web.HttpUtility.ParseQueryString(m.Cuerpo!)["From"]);
+    }
+
+    [Fact]
+    public async Task Twilio_ErrorDeLaApi_SeExplicaYNoSeReintenta()
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.BadRequest,
+            """{"code":21211,"message":"The 'To' number whatsapp:+5691 is not a valid phone number.","more_info":"https://www.twilio.com/docs/errors/21211","status":400}"""));
+        var r = await Twilio(m).EnviarPlantillaAsync("5691", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.False(r.Reintentable);
+        Assert.Contains("21211", r.Error);
+        Assert.Contains("not a valid phone number", r.Error);
+        Assert.DoesNotContain("secreto-twilio", r.Error);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, true)]
+    [InlineData(HttpStatusCode.BadRequest, false)]
+    [InlineData(HttpStatusCode.Unauthorized, false)]
+    [InlineData(HttpStatusCode.NotFound, false)]
+    public async Task Twilio_SoloReintentaLoTransitorio(HttpStatusCode codigo, bool reintentable)
+    {
+        var r = await Twilio(new Manejador(() => Json_(codigo, "no es json"))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.Equal(reintentable, r.Reintentable);
+        Assert.Equal($"HTTP {(int)codigo}", r.Error);
+    }
+
+    [Fact]
+    public async Task Twilio_SinConexion_EsReintentable()
+    {
+        var r = await Twilio(new Manejador(() => throw new HttpRequestException("sin red"))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.True(r.Reintentable);
+        Assert.Contains("Twilio", r.Error);
+    }
+
+    [Fact]
+    public async Task Twilio_PlantillaSinContentSid_NoLlamaALaApi()
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.Created, "{}"));
+        var r = await Twilio(m).EnviarPlantillaAsync("56912345678", "recordatorio_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.False(r.Reintentable);
+        Assert.Contains("recordatorio_boleta", r.Error);
+        Assert.Contains("Content SID", r.Error);
+        Assert.Equal(0, m.Llamadas);
+    }
+
+    [Fact]
+    public async Task Twilio_SinCredenciales_NoLlamaALaApi()
+    {
+        var m = new Manejador(() => Json_(HttpStatusCode.Created, "{}"));
+        var r = await Twilio(m, t => t.AuthToken = null).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.False(r.Reintentable);
+        Assert.Contains("Twilio no está configurado", r.Error);
+        Assert.Equal(0, m.Llamadas);
+    }
+
+    [Fact]
+    public void Opciones_ElProveedorDefineQuePideLaConfiguracion()
+    {
+        var o = new OpcionesWhatsApp { PhoneNumberId = "1", AccessToken = "t" };
+        Assert.True(o.Configurado);                       // Meta por defecto
+        o.Proveedor = "twilio";                           // sin distinguir mayúsculas
+        Assert.True(o.UsaTwilio);
+        Assert.False(o.Configurado);                      // las credenciales de Meta no sirven para Twilio
+        o.Twilio = new OpcionesTwilio { AccountSid = "AC1", AuthToken = "x", From = "+56912345678" };
+        Assert.True(o.Configurado);
+        o.Proveedor = "twilo";
+        Assert.False(o.ProveedorValido);
+    }
+
     // ---- Los tres avisos, en el flujo real ----
 
     private static async Task<(Planilla P, Prestador Fra)> PlanillaConPrestadorAsync(Entorno e)

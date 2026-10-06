@@ -97,6 +97,7 @@
         <span>Se envía con plantillas aprobadas en Meta (WhatsApp Business) solo a prestadores que lo autorizaron. La configuración (token y número) está en el archivo de configuración del servidor; ver <span class="mono">docs/whatsapp.md</span>.</span>
     </div>
     <dl class="dl-grid">
+        <dt>Proveedor</dt><dd>@(Model.Wa.UsaTwilio ? "Twilio" : Model.Wa.ProveedorValido ? "Meta (API Cloud)" : "“" + Model.Wa.Proveedor + "” (no válido: use Meta o Twilio)")</dd>
         <dt>Plantillas</dt><dd class="mono text-12">@Model.Wa.PlantillaSolicitud · @Model.Wa.PlantillaRecordatorio · @Model.Wa.PlantillaObservada (idioma @Model.Wa.Idioma)</dd>
         <dt>En cola</dt><dd>@Model.WaPendientes</dd>
         <dt>Enviados (24 h)</dt><dd>@Model.WaEnviados24h</dd>
