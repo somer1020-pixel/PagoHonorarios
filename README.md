@@ -123,6 +123,8 @@ Valor total bruto (columna H): puede venir con la fórmula `ROUND(F*G,0)` o escr
 
 ## Despliegue (Windows Server)
 
+Guía paso a paso para IIS en el servidor de SQL Server (base de datos, grupo de aplicaciones, permisos, primera prueba y actualizaciones): [`docs/despliegue-iis.md`](docs/despliegue-iis.md). Lo siguiente es el resumen.
+
 1. Instalar IIS y el **ASP.NET Core Hosting Bundle (.NET 10)**; SQL Server Express.
 2. `dotnet publish src/IpsosPagoHonorarios.Web -c Release -o publish` (o usar el artefacto del workflow) y crear el sitio en IIS apuntando a `publish`.
 3. Configurar `appsettings.Production.json` (ver `deploy/appsettings.Production.ejemplo.json`). La app aplica las migraciones al iniciar; también se puede usar el script idempotente `migraciones.sql` del artefacto.
