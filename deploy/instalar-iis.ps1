@@ -38,8 +38,11 @@ icacls $logs /grant "${id}:(OI)(CI)M" | Out-Null
 icacls $archivos /grant "${id}:(OI)(CI)M" | Out-Null
 $secretos = Join-Path $app "appsettings.Production.json"
 if (Test-Path $secretos) {
-    icacls $secretos /inheritance:r /grant "Administrators:F" "${id}:R" | Out-Null
-    Write-Host "Permisos de appsettings.Production.json ajustados (solo administradores y la aplicación)."
+    # Solo administradores, el sistema, quien instala y la aplicación. Para editarlo hay que abrir el editor como administrador.
+    $yo = "$env:USERDOMAIN\$env:USERNAME"
+    icacls $secretos /inheritance:r /grant "Administrators:F" "SYSTEM:F" "${yo}:M" "${id}:R" | Out-Null
+    Write-Host "Permisos de appsettings.Production.json ajustados (administradores, el sistema, $yo y la aplicación)."
+    Write-Host "Para editarlo, abre el editor como administrador."
 }
 else {
     Write-Host "Falta crear $secretos. Después de crearlo, vuelve a ejecutar este script para protegerlo."

@@ -107,7 +107,7 @@ $id = "IIS AppPool\IpsosPagoHonorarios";
 icacls D:\IpsosPagoHonorarios\app /grant "${id}:(OI)(CI)RX";
 icacls D:\IpsosPagoHonorarios\app\logs /grant "${id}:(OI)(CI)M";
 icacls D:\IpsosPagoHonorarios\archivos /grant "${id}:(OI)(CI)M";
-icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /grant "Administrators:F" "${id}:R";
+icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /grant "Administrators:F" "SYSTEM:F" "${env:USERDOMAIN}\${env:USERNAME}:M" "${id}:R";
 ```
 
 ## 6. Primera prueba
@@ -120,6 +120,19 @@ icacls D:\IpsosPagoHonorarios\app\appsettings.Production.json /inheritance:r /gr
    - **Avisos por WhatsApp**: *Desactivado* mientras no lo configures.
 4. Crea un usuario de Operaciones y uno de Finanzas en **Maestros → Usuarios**, y haz un recorrido corto: importar una
    planilla, subir una boleta, revisar.
+
+### "Acceso denegado" al editar `appsettings.Production.json`
+
+El archivo queda protegido a propósito (lleva la contraseña de la base): solo lo leen administradores, el sistema, quien
+instaló y la aplicación. Ábrelo con un editor **ejecutado como administrador** (clic derecho → *Ejecutar como
+administrador*) o desde PowerShell elevado con `notepad D:\IpsosPagoHonorarios\app\appsettings.Production.json`. Si aun
+así se deniega, recupera el acceso con:
+
+```powershell
+$f = "D:\IpsosPagoHonorarios\app\appsettings.Production.json";
+takeown /f $f;
+icacls $f /grant "Administrators:F" "SYSTEM:F" "${env:USERDOMAIN}\${env:USERNAME}:M" "IIS AppPool\IpsosPagoHonorarios:R";
+```
 
 ### Si no abre
 
