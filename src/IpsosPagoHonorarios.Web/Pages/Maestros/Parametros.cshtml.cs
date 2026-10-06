@@ -5,12 +5,13 @@ using IpsosPagoHonorarios.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace IpsosPagoHonorarios.Web.Pages.Maestros;
 
 /// <summary>Parámetros del ciclo de pago y tasa de retención por año: solo el Administrador.</summary>
 [Authorize(Roles = Roles.Admin)]
-public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor auditor, ILectorOcr ocr) : PaginaBase
+public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor auditor, ILectorOcr ocr, IOptions<OpcionesWhatsApp> whatsapp, IProveedorWhatsApp proveedorWhatsApp) : PaginaBase
 {
     public Parametro P { get; set; } = new();
     public List<TasaRetencion> Tasas { get; set; } = [];
@@ -20,6 +21,13 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
     public bool? LecturaSinBloqueos { get; set; }
     public LecturaBoleta? PruebaLectura { get; set; }
     public string? PruebaArchivo { get; set; }
+    public OpcionesWhatsApp Wa => whatsapp.Value;
+    public int WaPendientes { get; set; }
+    public int WaEnviados24h { get; set; }
+    public int WaFallidos { get; set; }
+    public string? WaUltimoError { get; set; }
+    public ResultadoEnvio? PruebaWhatsApp { get; set; }
+    public string? PruebaWhatsAppPara { get; set; }
 
     public async Task OnGetAsync()
     {
@@ -27,6 +35,12 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
         Tasas = await db.TasasRetencion.OrderByDescending(t => t.Anio).ToListAsync();
         Abiertos = await db.Ciclos.Where(c => c.Estado == CicloEstado.Abierto).OrderBy(c => c.Periodo).ToListAsync();
         LecturaSinBloqueos = await BaseDatos.LecturaSinBloqueosAsync(db);
+        var max = Wa.MaxIntentos;
+        var hace24h = DateTime.UtcNow.AddHours(-24);
+        WaPendientes = await db.WhatsApp.CountAsync(m => m.EnviadoEn == null && m.Intentos < max);
+        WaEnviados24h = await db.WhatsApp.CountAsync(m => m.EnviadoEn >= hace24h);
+        WaFallidos = await db.WhatsApp.CountAsync(m => m.EnviadoEn == null && m.Intentos >= max);
+        WaUltimoError = await db.WhatsApp.Where(m => m.EnviadoEn == null && m.Error != null).OrderByDescending(m => m.UltimoIntentoEn).Select(m => m.Error).FirstOrDefaultAsync();
     }
 
     public Task<IActionResult> OnPostGuardarAsync(int diaDescargaDesde, int diaDescargaHasta, int diaLimiteBoleta, int diaPago,
@@ -92,6 +106,20 @@ public class ParametrosModel(AppDbContext db, Parametros parametros, Auditor aud
         }
         PruebaOcr = await ocr.ReconocerAsync(bytes, HttpContext.RequestAborted);
         if (PruebaOcr.Lineas is { } l) PruebaLectura = LectorBoletaTexto.Leer(l);
+        return Page();
+    }
+
+    /// <summary>Envía la plantilla de solicitud con datos ficticios a un celular, sin pasar por la bandeja: valida token, número y plantilla.</summary>
+    public async Task<IActionResult> OnPostProbarWhatsAppAsync(string? telefono)
+    {
+        await OnGetAsync();
+        var para = Telefono.NormalizarWhatsApp(telefono);
+        if (para is null) { MensajeError = "Ingresa un celular válido (9 1234 5678 o +código de país)."; return Page(); }
+        PruebaWhatsAppPara = Telefono.Formatear(para);
+        PruebaWhatsApp = await proveedorWhatsApp.EnviarPlantillaAsync(para, Wa.PlantillaSolicitud,
+            ["Prueba de configuración", "OCT-2026", "$100.000", "10-11-2026"], HttpContext.RequestAborted);
+        auditor.Registrar(nameof(Parametro), 0, "Probar WhatsApp", $"{PruebaWhatsAppPara}: {(PruebaWhatsApp.Ok ? "enviado" : PruebaWhatsApp.Error)}");
+        await db.SaveChangesAsync();
         return Page();
     }
 

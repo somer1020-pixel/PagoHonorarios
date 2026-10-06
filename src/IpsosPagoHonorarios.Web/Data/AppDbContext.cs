@@ -46,6 +46,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
     public DbSet<Parametro> Parametros => Set<Parametro>();
     public DbSet<TasaRetencion> TasasRetencion => Set<TasaRetencion>();
     public DbSet<CorreoSaliente> Correos => Set<CorreoSaliente>();
+    public DbSet<WhatsAppSaliente> WhatsApp => Set<WhatsAppSaliente>();
     public DbSet<UsuarioArea> UsuarioAreas => Set<UsuarioArea>();
 
     /// <summary>
@@ -109,6 +110,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, IUsuarioActual
             e.HasMany(x => x.Cuentas).WithOne(x => x.Prestador).HasForeignKey(x => x.PrestadorId);
             e.Ignore(x => x.RutPlanilla);
             e.Ignore(x => x.RutUi);
+        });
+        m.Entity<WhatsAppSaliente>(e =>
+        {
+            e.Property(x => x.Para).HasMaxLength(20);
+            e.Property(x => x.Plantilla).HasMaxLength(100);
+            e.Property(x => x.Parametros).HasMaxLength(2000);
+            e.Property(x => x.Texto).HasMaxLength(1000);
+            e.Property(x => x.ProveedorId).HasMaxLength(100);
+            e.Property(x => x.Error).HasMaxLength(500);
+            // Control de duplicados (mismo aviso al mismo número en 24 h) y cola de pendientes.
+            e.HasIndex(x => new { x.Para, x.Plantilla, x.CreadoEn });
+            e.HasIndex(x => new { x.EnviadoEn, x.Intentos });
         });
         m.Entity<CuentaBancaria>(e =>
         {

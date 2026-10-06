@@ -90,6 +90,31 @@
         }
     }
 </div>
+<div class="tarjeta">
+    <h2>Avisos por WhatsApp</h2>
+    <div class="aviso @(Model.Wa.Habilitado && Model.Wa.Configurado ? "aviso-info" : "aviso-neutral") text-13">
+        <strong>@(!Model.Wa.Habilitado ? "Desactivado" : Model.Wa.Configurado ? "Activado" : "Activado, pero faltan credenciales")</strong>
+        <span>Se envía con plantillas aprobadas en Meta (WhatsApp Business) solo a prestadores que lo autorizaron. La configuración (token y número) está en el archivo de configuración del servidor; ver <span class="mono">docs/whatsapp.md</span>.</span>
+    </div>
+    <dl class="dl-grid">
+        <dt>Plantillas</dt><dd class="mono text-12">@Model.Wa.PlantillaSolicitud · @Model.Wa.PlantillaRecordatorio · @Model.Wa.PlantillaObservada (idioma @Model.Wa.Idioma)</dd>
+        <dt>En cola</dt><dd>@Model.WaPendientes</dd>
+        <dt>Enviados (24 h)</dt><dd>@Model.WaEnviados24h</dd>
+        <dt>Fallidos</dt><dd>@Model.WaFallidos@(Model.WaUltimoError is null ? "" : " · último error: " + Model.WaUltimoError)</dd>
+    </dl>
+    <form method="post" asp-page-handler="ProbarWhatsApp" class="d-flex flex-wrap gap-2 align-items-end">
+        <div><label class="form-label" for="wa-p">Enviar mensaje de prueba a un celular</label>
+            <input id="wa-p" name="telefono" class="form-control form-control-sm" placeholder="9 1234 5678" inputmode="tel" required /></div>
+        <button class="btn btn-secondary btn-sm">Enviar prueba</button>
+    </form>
+    @if (Model.PruebaWhatsApp is { } pw)
+    {
+        <div class="aviso @(pw.Ok ? "aviso-success" : "aviso-danger") text-13">
+            <strong>@(pw.Ok ? $"Enviado a {Model.PruebaWhatsAppPara}" : $"No se pudo enviar a {Model.PruebaWhatsAppPara}")</strong>
+            @if (pw.Ok) { <span class="mono text-12">@pw.ProveedorId</span> } else { <span>@pw.Error</span> }
+        </div>
+    }
+</div>
 @if (Model.LecturaSinBloqueos is { } rcsi)
 {
     <div class="aviso @(rcsi ? "aviso-info" : "aviso-danger") text-13">

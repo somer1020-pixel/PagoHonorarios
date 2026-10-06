@@ -3,6 +3,7 @@ using System.Text.Json;
 using IpsosPagoHonorarios.Core;
 using IpsosPagoHonorarios.Web.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace IpsosPagoHonorarios.Web.Services;
 
@@ -119,13 +120,63 @@ public class Auditor(AppDbContext db, IUsuarioActual usuario, TimeProvider reloj
 /// Avisos solo por correo (R-20, R-21, R-26). Se encolan en la bandeja de salida; el envío real depende del proveedor
 /// SMTP (TODO(diseño)). En desarrollo quedan visibles en la bitácora.
 /// </summary>
-public class Correos(AppDbContext db, TimeProvider reloj, ILogger<Correos> log)
+public class Correos(AppDbContext db, TimeProvider reloj, ILogger<Correos> log, IOptions<OpcionesWhatsApp>? whatsapp = null)
 {
     public void Encolar(string? para, string asunto, string cuerpo)
     {
         if (string.IsNullOrWhiteSpace(para)) return;
         db.Correos.Add(new CorreoSaliente { CreadoEn = reloj.GetUtcNow().UtcDateTime, Para = para, Asunto = asunto, Cuerpo = cuerpo });
         log.LogInformation("Correo encolado para {Para}: {Asunto}", para, asunto);
+    }
+
+    private OpcionesWhatsApp Wa => whatsapp?.Value ?? new();
+
+    /// <summary>Primer aviso: el pago está listo para boletear. Variables: nombre, ciclo, monto bruto, fecha límite.</summary>
+    public Task EncolarSolicitudBoletaAsync(Prestador p, string ciclo, decimal bruto, DateOnly limite) =>
+        EncolarWhatsAppAsync(p, Wa.PlantillaSolicitud,
+            $"Hola {p.NombreCompleto}: tu pago de {ciclo} está listo para boletear. Emite una sola boleta por {Formato.Clp(bruto)} y súbela en el portal antes del {Formato.Fecha(limite)}.",
+            p.NombreCompleto, ciclo, Formato.Clp(bruto), Formato.Fecha(limite));
+
+    /// <summary>Recordatorio a quien aún no sube su boleta. Variables: nombre, ciclo, fecha límite.</summary>
+    public Task EncolarRecordatorioBoletaAsync(Prestador p, string ciclo, DateOnly limite) =>
+        EncolarWhatsAppAsync(p, Wa.PlantillaRecordatorio,
+            $"Hola {p.NombreCompleto}: aún no recibimos tu boleta de {ciclo}. Súbela en el portal antes del {Formato.Fecha(limite)}.",
+            p.NombreCompleto, ciclo, Formato.Fecha(limite));
+
+    /// <summary>Boleta observada: debe subir una nueva. Variables: nombre, motivo, cuándo (“hasta las 22:52” / “a la brevedad”).</summary>
+    public Task EncolarBoletaObservadaAsync(Prestador p, string motivo, string cuando) =>
+        EncolarWhatsAppAsync(p, Wa.PlantillaObservada,
+            $"Hola {p.NombreCompleto}: tu boleta fue observada. Motivo: {motivo}. Sube una nueva boleta en el portal {cuando}.",
+            p.NombreCompleto, motivo, cuando);
+
+    /// <summary>
+    /// Encola un WhatsApp si el canal está habilitado, el prestador lo autorizó y su teléfono es un celular válido.
+    /// No repite el mismo aviso (mismas variables) al mismo número dentro de 24 horas, p. ej. al reimportar una planilla.
+    /// </summary>
+    public async Task EncolarWhatsAppAsync(Prestador p, string plantilla, string texto, params string[] parametros)
+    {
+        if (!Wa.Habilitado || !p.WhatsAppAutorizado) return;
+        var para = Telefono.NormalizarWhatsApp(p.Telefono);
+        if (para is null) return;
+        var json = Json.Serializar(parametros.Select(LimpiarParametro).ToList());
+        var desde = reloj.GetUtcNow().UtcDateTime.AddHours(-24);
+        var repetido = db.WhatsApp.Local.Any(m => m.Para == para && m.Plantilla == plantilla && m.CreadoEn >= desde && m.Parametros == json)
+                       || await db.WhatsApp.AnyAsync(m => m.Para == para && m.Plantilla == plantilla && m.CreadoEn >= desde && m.Parametros == json);
+        if (repetido) return;
+        db.WhatsApp.Add(new WhatsAppSaliente
+        {
+            CreadoEn = reloj.GetUtcNow().UtcDateTime, PrestadorId = p.Id == 0 ? null : p.Id, Para = para, Plantilla = plantilla,
+            Parametros = json, Texto = texto.Length > 1000 ? texto[..1000] : texto
+        });
+        log.LogInformation("WhatsApp encolado ({Plantilla}) para ****{Fin}", plantilla, para[^4..]);
+    }
+
+    /// <summary>WhatsApp no admite saltos de línea, tabulaciones ni más de 4 espacios seguidos en una variable, ni variables vacías.</summary>
+    internal static string LimpiarParametro(string? t)
+    {
+        var limpio = System.Text.RegularExpressions.Regex.Replace(t ?? "", @"\s+", " ").Trim();
+        if (limpio.Length == 0) return "-";
+        return limpio.Length > 200 ? limpio[..197] + "..." : limpio;
     }
 }
 

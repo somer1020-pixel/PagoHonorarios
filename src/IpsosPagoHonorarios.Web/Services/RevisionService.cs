@@ -62,6 +62,7 @@ public class RevisionService(
             if (boleta is not null) boleta.Estado = BoletaEstado.Observada;
             correos.Encolar(prest.Email, $"Tu boleta fue observada (plazo {Formato.Plazo(par.PlazoCorreccionMinutos)})",
                 $"Hola {prest.NombreCompleto}: {string.Join(" ", g.Select(o => o.Detalle))} Sube una nueva boleta en el portal antes de {vence}.");
+            await correos.EncolarBoletaObservadaAsync(prest, string.Join(" ", g.Select(o => o.Detalle)), $"antes de las {Formato.Hora(d.VenceEn)}");
         }
         auditor.Registrar(nameof(Planilla), p.Id, "Devolver planilla", $"{p.Titulo} v{p.Version} con {abiertas.Count} observaciones; vence {vence}");
         await db.SaveChangesAsync();

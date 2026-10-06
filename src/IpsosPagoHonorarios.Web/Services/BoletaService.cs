@@ -271,6 +271,7 @@ public class BoletaService(
         auditor.Registrar(nameof(BoletaHonorarios), b.Id, "Pedir nueva boleta", motivo);
         correos.Encolar(b.Prestador.Email, "Tu boleta fue observada",
             $"Hola {b.Prestador.NombreCompleto}: tu boleta N° {b.NumeroBoleta} fue observada. Motivo: {motivo}. Sube una nueva desde el portal.");
+        await correos.EncolarBoletaObservadaAsync(b.Prestador, motivo, "a la brevedad");
         await db.SaveChangesAsync();
     }
 
@@ -280,9 +281,13 @@ public class BoletaService(
         var p = await ciclos.PlanillaCompletaAsync(planillaId) ?? throw new ReglaException("Planilla no encontrada.");
         var pendientes = p.Activas().GroupBy(l => l.PrestadorId).Where(g => p.BoletaVigente(g.Key) is null).Select(g => g.First().Prestador).ToList();
         var par = await parametros.ObtenerAsync();
+        var limite = Conciliacion.FechaLimite(p.Ciclo.Periodo, par.DiaLimiteBoleta);
         foreach (var prest in pendientes)
+        {
             correos.Encolar(prest.Email, $"Recordatorio: sube tu boleta de {p.Ciclo.Codigo}",
-                $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Titulo}. Plazo de emisión hasta el {Formato.Fecha(Conciliacion.FechaLimite(p.Ciclo.Periodo, par.DiaLimiteBoleta))}.");
+                $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Titulo}. Plazo de emisión hasta el {Formato.Fecha(limite)}.");
+            await correos.EncolarRecordatorioBoletaAsync(prest, p.Ciclo.Codigo, limite);
+        }
         auditor.Registrar(nameof(Planilla), p.Id, "Recordar a pendientes", $"{pendientes.Count} prestadores");
         await db.SaveChangesAsync();
         return pendientes.Count;

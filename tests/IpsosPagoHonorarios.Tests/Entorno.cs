@@ -26,6 +26,8 @@ public sealed class Entorno : IDisposable
     public AppDbContext Db { get; }
     public Almacenamiento Archivos { get; }
     public Auditor Auditor { get; }
+    /// <summary>WhatsApp apagado por defecto; las pruebas del canal lo activan.</summary>
+    public OpcionesWhatsApp WhatsApp { get; } = new() { PhoneNumberId = "123456", AccessToken = "token-de-prueba" };
     public Correos Correos { get; }
     public Parametros Parametros { get; }
     public CicloService Ciclos { get; }
@@ -47,7 +49,7 @@ public sealed class Entorno : IDisposable
         Db.Database.EnsureCreated();
         Archivos = new Almacenamiento(Carpeta);
         Auditor = new Auditor(Db, Usuario, Reloj);
-        Correos = new Correos(Db, Reloj, NullLogger<Correos>.Instance);
+        Correos = new Correos(Db, Reloj, NullLogger<Correos>.Instance, Options.Create(WhatsApp));
         Parametros = new Parametros(Db);
         Ciclos = new CicloService(Db, Parametros, Auditor, Reloj);
         Excel = new ExcelPlanilla(Db, Options.Create(new OpcionesPlantillas()), new HostingEnvironment { ContentRootPath = Carpeta });

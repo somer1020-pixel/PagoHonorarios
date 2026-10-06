@@ -55,6 +55,8 @@
                         <div><label class="form-label" for="pr-t">Teléfono</label><input id="pr-t" name="telefono" class="form-control" value="@s?.Telefono" /></div>
                     </div>
                     <span class="text-12 muted">Correo o teléfono: al menos uno.</span>
+                    <label class="d-flex gap-2 align-items-start text-13"><input type="checkbox" name="whatsApp" value="true" @(s?.WhatsAppAutorizado == true ? "checked" : null) />
+                        <span>El prestador autorizó recibir avisos por WhatsApp (solicitud y recordatorio de boleta). Requiere un celular en “Teléfono”.@(s?.WhatsAppAutorizadoEn is { } wa ? $" Autorizado el {Formato.Fecha(wa)}." : "")</span></label>
                     <button class="btn btn-primary align-self-start">Guardar</button>
                 </fieldset>
             </form>

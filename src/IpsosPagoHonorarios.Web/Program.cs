@@ -108,6 +108,9 @@ builder.Services.Configure<OpcionesAlmacenamiento>(cfg.GetSection("Almacenamient
 builder.Services.Configure<OpcionesPlantillas>(cfg.GetSection("Plantillas"));
 builder.Services.Configure<OpcionesPublicacion>(cfg.GetSection("Publicacion"));
 builder.Services.Configure<OpcionesTurnstile>(cfg.GetSection("Turnstile"));
+builder.Services.Configure<OpcionesWhatsApp>(cfg.GetSection("WhatsApp"));
+builder.Services.AddHttpClient<IProveedorWhatsApp, ProveedorWhatsAppMeta>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<EnviadorWhatsApp>();
 builder.Services.AddSingleton<Almacenamiento>();
 builder.Services.AddHttpClient<Turnstile>();
 builder.Services.AddScoped<Auditor>();
@@ -132,6 +135,8 @@ builder.Services.AddScoped<Semilla>();
 builder.Services.AddScoped<SemillaDemo>();
 if (cfg.GetValue("Plazos:Habilitado", true))
     builder.Services.AddHostedService<PlazosBackgroundService>();
+if (cfg.GetValue("WhatsApp:Habilitado", false))
+    builder.Services.AddHostedService<WhatsAppBackgroundService>();
 
 var app = builder.Build();
 

@@ -113,6 +113,9 @@ public class Prestador : EntidadAuditable
     public DateTime? PortalInvitadoEn { get; set; }
     public DateTime? PortalActivadoEn { get; set; }
     public bool Activo { get; set; } = true;
+    /// <summary>El prestador autorizó recibir avisos por WhatsApp (WhatsApp exige consentimiento previo).</summary>
+    public bool WhatsAppAutorizado { get; set; }
+    public DateTime? WhatsAppAutorizadoEn { get; set; }
     public List<CuentaBancaria> Cuentas { get; set; } = [];
 
     /// <summary>Formato planilla: 12345678-5 (también es el UserName del portal).</summary>
@@ -306,6 +309,30 @@ public class TasaRetencion : EntidadAuditable
 {
     public int Anio { get; set; }
     public decimal Tasa { get; set; }
+}
+
+/// <summary>
+/// Bandeja de mensajes de WhatsApp (plantillas aprobadas por Meta) para pedir o recordar la boleta. Un proceso en segundo
+/// plano los envía; <see cref="Parametros"/> guarda las variables de la plantilla en JSON.
+/// </summary>
+public class WhatsAppSaliente
+{
+    public long Id { get; set; }
+    public DateTime CreadoEn { get; set; }
+    public int? PrestadorId { get; set; }
+    /// <summary>Teléfono en formato internacional sin "+" (p. ej. 56912345678).</summary>
+    public string Para { get; set; } = "";
+    public string Plantilla { get; set; } = "";
+    /// <summary>Variables {{1}}, {{2}}… de la plantilla, como arreglo JSON de textos.</summary>
+    public string Parametros { get; set; } = "[]";
+    /// <summary>Texto legible del aviso (para revisión; el texto real lo define la plantilla en Meta).</summary>
+    public string Texto { get; set; } = "";
+    public DateTime? EnviadoEn { get; set; }
+    public int Intentos { get; set; }
+    public DateTime? UltimoIntentoEn { get; set; }
+    /// <summary>Identificador del mensaje en WhatsApp (wamid…).</summary>
+    public string? ProveedorId { get; set; }
+    public string? Error { get; set; }
 }
 
 /// <summary>Bandeja de correos salientes (R-21, R-26). TODO(diseño): proveedor SMTP.</summary>

@@ -8,7 +8,7 @@ namespace IpsosPagoHonorarios.Web.Services;
 /// <summary>Mantención de prestadores y de su acceso al portal (R-20).</summary>
 public class PrestadoresService(AppDbContext db, UserManager<Usuario> users, CicloService ciclos, Auditor auditor, Correos correos)
 {
-    public async Task<Prestador> GuardarAsync(int? id, string nombre, string rut, string? email, string? telefono)
+    public async Task<Prestador> GuardarAsync(int? id, string nombre, string rut, string? email, string? telefono, bool? whatsApp = null)
     {
         if (string.IsNullOrWhiteSpace(nombre)) throw new ReglaException("El nombre es obligatorio.");
         if (!RutHelper.TryParse(rut, out var cuerpo, out var dv)) throw new ReglaException($"RUT inválido: {RutHelper.Error(rut)}.");
@@ -17,6 +17,7 @@ public class PrestadoresService(AppDbContext db, UserManager<Usuario> users, Cic
         if (email is null && telefono is null) throw new ReglaException("Ingresa correo o teléfono (al menos uno).");
         if (email is not null && !System.Net.Mail.MailAddress.TryCreate(email, out _)) throw new ReglaException("El correo no es válido.");
         if (await db.Prestadores.AnyAsync(p => p.Rut == cuerpo && p.Id != id)) throw new ReglaException("Ya existe un prestador con ese RUT.");
+        if (whatsApp == true) ExigirCelular(telefono);
 
         Prestador p;
         if (id is null)
@@ -34,6 +35,7 @@ public class PrestadoresService(AppDbContext db, UserManager<Usuario> users, Cic
         p.NombreCompleto = nombre.Trim();
         p.Email = email;
         p.Telefono = telefono;
+        if (whatsApp is { } autoriza) AplicarWhatsApp(p, autoriza);
         if (p.UsuarioId is not null && await users.FindByIdAsync(p.UsuarioId) is { } u && u.Email != email)
         {
             u.Email = email;
@@ -42,6 +44,38 @@ public class PrestadoresService(AppDbContext db, UserManager<Usuario> users, Cic
         auditor.Registrar(nameof(Prestador), p.RutPlanilla, id is null ? "Crear prestador" : "Editar prestador", p.NombreCompleto);
         await db.SaveChangesAsync();
         return p;
+    }
+
+    /// <summary>
+    /// Autoriza o retira el consentimiento para avisos por WhatsApp. Autorizar exige un celular válido (WhatsApp solo escribe a
+    /// números con la app). Guarda la fecha del consentimiento.
+    /// </summary>
+    private static void ExigirCelular(string? telefono)
+    {
+        if (Telefono.NormalizarWhatsApp(telefono) is null)
+            throw new ReglaException("Para recibir avisos por WhatsApp el teléfono debe ser un celular chileno (9 1234 5678) o un número internacional con +.");
+    }
+
+    private static void AplicarWhatsApp(Prestador p, bool autoriza)
+    {
+        if (autoriza)
+        {
+            ExigirCelular(p.Telefono);
+            if (!p.WhatsAppAutorizado) p.WhatsAppAutorizadoEn = DateTime.UtcNow;
+        }
+        else p.WhatsAppAutorizadoEn = null;
+        p.WhatsAppAutorizado = autoriza;
+    }
+
+    /// <summary>El propio prestador (portal) indica su celular y si acepta avisos por WhatsApp.</summary>
+    public async Task ConfigurarWhatsAppAsync(int prestadorId, string? telefono, bool autoriza)
+    {
+        var p = await db.Prestadores.FirstOrDefaultAsync(x => x.Id == prestadorId) ?? throw new ReglaException("Prestador no encontrado.");
+        if (!string.IsNullOrWhiteSpace(telefono)) p.Telefono = telefono.Trim();
+        AplicarWhatsApp(p, autoriza);
+        auditor.Registrar(nameof(Prestador), p.RutPlanilla, autoriza ? "Autorizar WhatsApp" : "Retirar autorización WhatsApp",
+            autoriza ? Telefono.Formatear(Telefono.NormalizarWhatsApp(p.Telefono)!) : null);
+        await db.SaveChangesAsync();
     }
 
     /// <summary>R-20: usuario = RUT, solo contraseña. Crea la cuenta del portal si no existe.</summary>

@@ -175,6 +175,32 @@ public class AplicacionTests(AppFactory app) : IClassFixture<AppFactory>
     }
 
     [Fact]
+    public async Task WhatsApp_AutorizarExigeCelularValido_YGuardaLaFechaDelConsentimiento()
+    {
+        using var scope = app.Services.CreateScope();
+        var prestadores = scope.ServiceProvider.GetRequiredService<PrestadoresService>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var ex = await Assert.ThrowsAsync<ReglaException>(() => prestadores.GuardarAsync(null, "Con Fijo", "11.111.111-1", "a@b.cl", "22 123 4567", whatsApp: true));
+        Assert.Contains("celular", ex.Message);
+
+        var p = await prestadores.GuardarAsync(null, "Con Celular", "11.111.111-1", null, "9 8765 4321", whatsApp: true);
+        Assert.True(p.WhatsAppAutorizado);
+        Assert.NotNull(p.WhatsAppAutorizadoEn);
+
+        await prestadores.ConfigurarWhatsAppAsync(p.Id, null, autoriza: false);   // el prestador retira su autorización desde el portal
+        var retirada = await db.Prestadores.AsNoTracking().SingleAsync(x => x.Id == p.Id);
+        Assert.False(retirada.WhatsAppAutorizado);
+        Assert.Null(retirada.WhatsAppAutorizadoEn);
+
+        await prestadores.ConfigurarWhatsAppAsync(p.Id, "+56 9 1111 2222", autoriza: true);
+        Assert.Equal("+56 9 1111 2222", (await db.Prestadores.AsNoTracking().SingleAsync(x => x.Id == p.Id)).Telefono);
+        // Lo que el prestador hace desde el portal queda en la bitácora (la primera autorización, hecha en mantención, se audita como edición).
+        Assert.Equal(["Autorizar WhatsApp", "Retirar autorización WhatsApp"],
+            await db.Auditorias.Where(x => x.Accion.Contains("WhatsApp")).OrderByDescending(x => x.Id).Select(x => x.Accion).ToListAsync());
+    }
+
+    [Fact]
     public async Task R20_CuentaDelPortal_UsuarioRut_CorreoOTelefono_EnlaceDeUnSoloUso()
     {
         using var scope = app.Services.CreateScope();
