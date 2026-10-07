@@ -124,7 +124,7 @@ public class CuentasService(AppDbContext db, CicloService ciclos, Auditor audito
 
     private static CuentaRef? RefDe(LineaPago l) =>
         string.IsNullOrWhiteSpace(l.CuentaPlanillaNumero) ? null
-            : new CuentaRef(l.CuentaPlanillaBanco ?? "", l.CuentaPlanillaTipo ?? "", l.CuentaPlanillaNumero);
+            : new CuentaRef(l.CuentaPlanillaBanco ?? "", l.CuentaPlanillaTipo ?? "", l.CuentaPlanillaNumero, l.Numero);
 
     private static void ActualizarEstadoAlertas(Planilla p)
     {

@@ -54,6 +54,25 @@ public class PlanillaYCuentasTests
     }
 
     [Fact]
+    public async Task R24_FilasDistintas_LaAlertaGuardadaNombraLaFilaQueDifiere()
+    {
+        // Un prestador con 3 filas: las dos primeras RUT · ESTADO 20535454 y la tercera, el mismo número como VISTA.
+        using var e = new Entorno();
+        var yer = e.Prestador("Yeremi Ugarte", "20535454-9", "RUT", "20535454", "ESTADO");
+        var pl = await e.PlanillaAsync("FACE TO FACE",
+            new Fila(yer, "260041200105", Entorno.E, 6500, 10, ("RUT", "20535454", "ESTADO")),
+            new Fila(yer, "260041200105", Entorno.E, 6500, 11, ("RUT", "20535454", "ESTADO")),
+            new Fila(yer, "260041200105", Entorno.E, 6500, 12, ("VISTA", "20535454", "ESTADO")));
+        var filas = pl.Lineas.OrderBy(l => l.Numero).ToList();
+        Assert.All(filas, l => Assert.Equal(ResultadoCuenta.PosibleErrorTipeo, l.ResultadoCuenta));
+        // Las filas iguales a la registrada indican cuál es la distinta (no basta con "cuentas distintas").
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: la fila 3 trae VISTA · ESTADO 20535454.", filas[0].ResultadoCuentaDetalle);
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: la fila 3 trae VISTA · ESTADO 20535454.", filas[1].ResultadoCuentaDetalle);
+        // La distinta indica con qué difiere.
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: la fila 1 trae RUT · ESTADO 20535454 (y 1 fila más con otra cuenta).", filas[2].ResultadoCuentaDetalle);
+    }
+
+    [Fact]
     public async Task R25_ConAlertasNoSeEnvia_SeResuelveRegistrandoODifiriendo()
     {
         var (e, p, pr) = await DataProcessingAsync();

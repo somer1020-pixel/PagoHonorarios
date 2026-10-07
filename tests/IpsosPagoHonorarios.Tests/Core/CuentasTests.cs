@@ -84,6 +84,39 @@ public class CuentasTests
     }
 
     [Fact]
+    public void R24_FilasDistintas_LaAlertaDiceCualFilaDifiere()
+    {
+        // Un prestador con 4 filas iguales (RUT · ESTADO 20535454) y una fila 42 con el mismo número pero tipo VISTA.
+        var rutF35 = new CuentaRef("ESTADO", "RUT", "20535454", 35);
+        var rutF36 = new CuentaRef("ESTADO", "RUT", "20535454", 36);
+        var rutF37 = new CuentaRef("ESTADO", "RUT", "20535454", 37);
+        var vistaF42 = new CuentaRef("ESTADO", "VISTA", "20535454", 42);
+
+        // Las filas iguales a la registrada siguen marcadas (regla R-24), pero ahora la alerta señala la fila distinta.
+        var igual = CuentaReglas.Clasificar(20535454, rutF35, rutF35, SinDuenos, [rutF36, rutF37, vistaF42]);
+        Assert.Equal(ResultadoCuenta.PosibleErrorTipeo, igual.Resultado);
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: la fila 42 trae VISTA · ESTADO 20535454.", igual.Detalle);
+
+        // La fila distinta ve que las demás traen otra cuenta.
+        var distinta = CuentaReglas.Clasificar(20535454, vistaF42, rutF35, SinDuenos, [rutF35, rutF36, rutF37]);
+        Assert.Equal(ResultadoCuenta.PosibleErrorTipeo, distinta.Resultado);
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: la fila 35 trae RUT · ESTADO 20535454 (y 2 filas más con otra cuenta).", distinta.Detalle);
+
+        // Una fila con el número pero sin banco ni tipo también es "distinta", y se dice.
+        var sinBanco = new CuentaRef("", "", "20535454", 50);
+        Assert.Contains("la fila 50 trae sin banco ni tipo 20535454",
+            CuentaReglas.Clasificar(20535454, rutF35, rutF35, SinDuenos, [sinBanco]).Detalle);
+
+        // Sin número de fila (otros usos) el mensaje sigue siendo claro.
+        Assert.Equal("Filas del mismo prestador con cuentas distintas: otra fila trae VISTA · BANEFE 1798765433.",
+            CuentaReglas.Clasificar(1, new CuentaRef("BANEFE", "VISTA", "1798765432"), null, SinDuenos, [new CuentaRef("BANEFE", "VISTA", "1798765433")]).Detalle);
+
+        // Mismo banco, tipo y número (aunque con ceros o puntos) no es una diferencia.
+        Assert.Equal(ResultadoCuenta.Coincide,
+            CuentaReglas.Clasificar(20535454, rutF35, rutF35, SinDuenos, [new CuentaRef("estado", "rut", "020.535.454", 40)]).Resultado);
+    }
+
+    [Fact]
     public void R24_DigitosDistintosResaltados()
     {
         var m = CuentaReglas.DigitosDistintos("0071234560", "0071234506");

@@ -1,8 +1,18 @@
 namespace IpsosPagoHonorarios.Core;
 
-/// <summary>Cuenta tal como se compara: banco, tipo y número normalizado.</summary>
-public sealed record CuentaRef(string Banco, string TipoCuenta, string Numero)
+/// <summary>Cuenta tal como se compara: banco, tipo y número normalizado. <paramref name="Fila"/> = N° de fila de la planilla, si viene de una.</summary>
+public sealed record CuentaRef(string Banco, string TipoCuenta, string Numero, int? Fila = null)
 {
+    /// <summary>Como se muestra en pantalla: "RUT · ESTADO 20535454"; si faltan banco y tipo lo dice.</summary>
+    public string Texto
+    {
+        get
+        {
+            var partes = new[] { TipoCuenta, Banco }.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
+            return (partes.Length == 0 ? "sin banco ni tipo" : string.Join(" · ", partes)) + " " + Numero.Trim();
+        }
+    }
+
     public string Normalizada => CuentaReglas.Normalizar(Numero);
     public bool MismoBancoYTipo(CuentaRef o) =>
         string.Equals(Banco, o.Banco, StringComparison.OrdinalIgnoreCase) &&
@@ -98,8 +108,15 @@ public static class CuentaReglas
             return new(ResultadoCuenta.CuentaTercero, $"Pertenece a {dueno.Value.Descripcion}. Bloqueada.");
 
         var otras = otrasFilasMismoPrestador.Where(o => o is not null && o.Normalizada.Length > 0).ToList();
-        if (otras.Any(o => !o!.Igual(enPlanilla)))
-            return new(ResultadoCuenta.PosibleErrorTipeo, "Filas del mismo prestador con cuentas distintas.");
+        var distintas = otras.Where(o => !o!.Igual(enPlanilla)).ToList();
+        if (distintas.Count > 0)
+        {
+            // Dice cuál es la fila que difiere: sin eso las filas idénticas marcadas parecen un error de la validación.
+            var primera = distintas[0]!;
+            var donde = primera.Fila is { } f ? $"la fila {f} trae" : "otra fila trae";
+            var resto = distintas.Count > 1 ? $" (y {distintas.Count - 1} fila{(distintas.Count > 2 ? "s" : "")} más con otra cuenta)" : "";
+            return new(ResultadoCuenta.PosibleErrorTipeo, $"Filas del mismo prestador con cuentas distintas: {donde} {primera.Texto}{resto}.");
+        }
 
         if (registrada is null)
             return new(ResultadoCuenta.CuentaNueva, "El RUT no tiene cuenta registrada.");
