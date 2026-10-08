@@ -111,11 +111,13 @@ builder.Services.Configure<OpcionesTurnstile>(cfg.GetSection("Turnstile"));
 builder.Services.Configure<OpcionesWhatsApp>(cfg.GetSection("WhatsApp"));
 builder.Services.AddHttpClient<ProveedorWhatsAppMeta>(c => c.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddHttpClient<ProveedorWhatsAppTwilio>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddHttpClient<ProveedorWhatsAppInstaPulse>(c => c.Timeout = TimeSpan.FromSeconds(20));
 {
     var wa = cfg.GetSection("WhatsApp").Get<OpcionesWhatsApp>() ?? new();
     if (wa.Habilitado && !wa.ProveedorValido)
-        throw new InvalidOperationException($"WhatsApp:Proveedor “{wa.Proveedor}” no es válido: use Meta o Twilio.");
+        throw new InvalidOperationException($"WhatsApp:Proveedor “{wa.Proveedor}” no es válido: use Meta, Twilio o InstaPulse.");
     if (wa.UsaTwilio) builder.Services.AddTransient<IProveedorWhatsApp>(sp => sp.GetRequiredService<ProveedorWhatsAppTwilio>());
+    else if (wa.UsaInstaPulse) builder.Services.AddTransient<IProveedorWhatsApp>(sp => sp.GetRequiredService<ProveedorWhatsAppInstaPulse>());
     else builder.Services.AddTransient<IProveedorWhatsApp>(sp => sp.GetRequiredService<ProveedorWhatsAppMeta>());
 }
 builder.Services.AddScoped<EnviadorWhatsApp>();

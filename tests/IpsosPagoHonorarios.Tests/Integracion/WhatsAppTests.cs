@@ -454,6 +454,179 @@ public class WhatsAppTests
         Assert.False(o.ProveedorValido);
     }
 
+    // ---- Contrato HTTP con InstaPulse (manual de integración de eventos y sistemas de pago) ----
+
+    private sealed class ManejadorInstaPulse(Func<string, string?, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        public List<(string Metodo, string Url, string? Usuario, string? Cuerpo)> Llamadas { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage r, CancellationToken ct)
+        {
+            var cuerpo = r.Content is null ? null : await r.Content.ReadAsStringAsync(ct);
+            Llamadas.Add((r.Method.Method, r.RequestUri!.ToString(), r.Headers.TryGetValues("x-remote-user", out var v) ? v.First() : null, cuerpo));
+            return responder(r.RequestUri.AbsolutePath, cuerpo);
+        }
+    }
+
+    /// <summary>Respuestas correctas de los 4 pasos, como en el manual.</summary>
+    private static HttpResponseMessage RespuestaOk(string ruta) => ruta switch
+    {
+        "/InstaPulseAPI2/participantes" => Json_(HttpStatusCode.OK, """{"success":true,"phone":"+56912345678","name":"Ana","project_id":"P","usuario":"IAOps","pauta_id":null}"""),
+        "/InstaPulseAPI2/casos" => Json_(HttpStatusCode.OK, """{"caso_id":"b1a45749-0fa7","message":"Caso creado exitosamente."}"""),
+        var r when r.EndsWith("/sessions") => Json_(HttpStatusCode.OK, """{"session_id":"a9315d0e-561b","message":"Sesión creada y lista para ser iniciada."}"""),
+        _ => Json_(HttpStatusCode.OK, """{"success":true,"session_id":"a9315d0e-561b","channel":"META","message_id":"wamid.HBgN123","status":"sent","mode":"marketing"}""")
+    };
+
+    private static ProveedorWhatsAppInstaPulse InstaPulse(ManejadorInstaPulse m, Action<OpcionesInstaPulse>? ajustar = null)
+    {
+        var ip = new OpcionesInstaPulse
+        {
+            UrlBase = "https://servidor-ipsos.latam/InstaPulseAPI2", UsuarioRemoto = "IAOps",
+            Pautas = { ["solicitud_boleta"] = 28, ["recordatorio_boleta"] = 29 }
+        };
+        ajustar?.Invoke(ip);
+        return new(new HttpClient(m), Options.Create(new OpcionesWhatsApp { Proveedor = "InstaPulse", InstaPulse = ip }));
+    }
+
+    [Fact]
+    public async Task InstaPulse_RecorreLosCuatroPasosDelManual()
+    {
+        var m = new ManejadorInstaPulse((ruta, _) => RespuestaOk(ruta));
+        var r = await InstaPulse(m).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana Pérez", "OCT-2026", "$100.000", "10-11-2026"]);
+
+        Assert.True(r.Ok);
+        Assert.Equal("wamid.HBgN123", r.ProveedorId);
+        Assert.Equal(
+        [
+            "https://servidor-ipsos.latam/InstaPulseAPI2/participantes",
+            "https://servidor-ipsos.latam/InstaPulseAPI2/casos",
+            "https://servidor-ipsos.latam/InstaPulseAPI2/casos/b1a45749-0fa7/sessions",
+            "https://servidor-ipsos.latam/InstaPulseAPI2/sessions/a9315d0e-561b/start/meta"
+        ], m.Llamadas.Select(l => l.Url).ToArray());
+        Assert.All(m.Llamadas, l => { Assert.Equal("POST", l.Metodo); Assert.Equal("IAOps", l.Usuario); });
+
+        using var paso1 = JsonDocument.Parse(m.Llamadas[0].Cuerpo!);
+        Assert.Equal("+56912345678", paso1.RootElement.GetProperty("phone").GetString());
+        Assert.Equal("Ana Pérez", paso1.RootElement.GetProperty("name").GetString());
+        Assert.Equal("es", paso1.RootElement.GetProperty("language").GetString());
+        var meta = paso1.RootElement.GetProperty("metadata");
+        Assert.Equal("PagoHonorarios", meta.GetProperty("origen").GetString());
+        Assert.Equal(["Ana Pérez", "OCT-2026", "$100.000", "10-11-2026"], Enumerable.Range(1, 4).Select(i => meta.GetProperty($"p{i}").GetString()!).ToArray());
+
+        using var paso2 = JsonDocument.Parse(m.Llamadas[1].Cuerpo!);
+        Assert.Equal("+56912345678", paso2.RootElement.GetProperty("phone_number").GetString());
+        Assert.Contains("solicitud_boleta", paso2.RootElement.GetProperty("titulo").GetString());
+
+        using var paso3 = JsonDocument.Parse(m.Llamadas[2].Cuerpo!);
+        Assert.Equal(28, paso3.RootElement.GetProperty("pauta_id").GetInt32());
+        Assert.False(paso3.RootElement.GetProperty("incluir_en_historial_global").GetBoolean());
+
+        using var paso4 = JsonDocument.Parse(m.Llamadas[3].Cuerpo!);
+        Assert.Equal(["Ana Pérez", "OCT-2026", "$100.000", "10-11-2026"],
+            paso4.RootElement.GetProperty("body_params").EnumerateArray().Select(x => x.GetString()!).ToArray());
+        Assert.Equal("es", paso4.RootElement.GetProperty("language_code").GetString());
+        Assert.True(paso4.RootElement.GetProperty("mark_active").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, paso4.RootElement.GetProperty("mode").ValueKind);   // null = InstaPulse detecta la ventana de 24 h
+    }
+
+    [Fact]
+    public async Task InstaPulse_UsaLaPautaDeCadaPlantilla_YAceptaUrlConBarraFinal()
+    {
+        var m = new ManejadorInstaPulse((ruta, _) => RespuestaOk(ruta));
+        await InstaPulse(m, ip => ip.UrlBase = "https://servidor-ipsos.latam/InstaPulseAPI2/").EnviarPlantillaAsync("56912345678", "recordatorio_boleta", ["Ana", "OCT-2026", "10-11-2026"]);
+        Assert.Equal("https://servidor-ipsos.latam/InstaPulseAPI2/participantes", m.Llamadas[0].Url);
+        using var paso3 = JsonDocument.Parse(m.Llamadas[2].Cuerpo!);
+        Assert.Equal(29, paso3.RootElement.GetProperty("pauta_id").GetInt32());
+    }
+
+    [Fact]
+    public async Task InstaPulse_SinPautaOSinConfiguracion_NoLlamaALaApi()
+    {
+        var m = new ManejadorInstaPulse((ruta, _) => RespuestaOk(ruta));
+        var sinPauta = await InstaPulse(m).EnviarPlantillaAsync("56912345678", "boleta_observada", ["Ana"]);
+        Assert.False(sinPauta.Ok);
+        Assert.False(sinPauta.Reintentable);
+        Assert.Contains("boleta_observada", sinPauta.Error);
+        Assert.Contains("pauta", sinPauta.Error);
+
+        var sinUrl = await InstaPulse(m, ip => ip.UrlBase = null).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(sinUrl.Ok);
+        Assert.Contains("no está configurado", sinUrl.Error);
+        Assert.Empty(m.Llamadas);
+    }
+
+    [Theory]
+    [InlineData("/InstaPulseAPI2/participantes", 1, "paso 1")]
+    [InlineData("/InstaPulseAPI2/casos", 2, "paso 2")]
+    [InlineData("/InstaPulseAPI2/casos/b1a45749-0fa7/sessions", 3, "paso 3")]
+    [InlineData("/InstaPulseAPI2/sessions/a9315d0e-561b/start/meta", 4, "paso 4")]
+    public async Task InstaPulse_UnaFallaEnCualquierPasoSeInformaYDetieneElFlujo(string rutaQueFalla, int llamadasEsperadas, string paso)
+    {
+        var m = new ManejadorInstaPulse((ruta, _) => ruta == rutaQueFalla ? Json_(HttpStatusCode.BadRequest, """{"detail":"Participante inválido"}""") : RespuestaOk(ruta));
+        var r = await InstaPulse(m).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.False(r.Reintentable);                  // un 400 no se arregla reintentando
+        Assert.Contains(paso, r.Error);
+        Assert.Contains("HTTP 400", r.Error);
+        Assert.Contains("Participante inválido", r.Error);
+        Assert.Equal(llamadasEsperadas, m.Llamadas.Count);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "Error interno", true)]
+    [InlineData(HttpStatusCode.BadGateway, "bad gateway", true)]
+    [InlineData(HttpStatusCode.TooManyRequests, "demasiadas", true)]
+    [InlineData(HttpStatusCode.InternalServerError, "Meta error 132001: Template name does not exist in the translation", false)]
+    [InlineData(HttpStatusCode.InternalServerError, "Meta error 132000: Number of parameters does not match", false)]
+    [InlineData(HttpStatusCode.NotFound, "no existe", false)]
+    public async Task InstaPulse_SoloReintentaLoTransitorio(HttpStatusCode codigo, string detalle, bool reintentable)
+    {
+        var m = new ManejadorInstaPulse((ruta, _) => ruta.EndsWith("/start/meta") ? Json_(codigo, JsonSerializer.Serialize(new { detail = detalle })) : RespuestaOk(ruta));
+        var r = await InstaPulse(m).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.Equal(reintentable, r.Reintentable);
+        Assert.Contains(detalle, r.Error);
+    }
+
+    [Fact]
+    public async Task InstaPulse_RespuestaSinIdsOConExitoFalso_EsErrorDefinitivo()
+    {
+        var sinCaso = await InstaPulse(new ManejadorInstaPulse((_, _) => Json_(HttpStatusCode.OK, """{"message":"ok"}"""))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(sinCaso.Ok);
+        Assert.Contains("caso_id", sinCaso.Error);
+
+        var exitoFalso = await InstaPulse(new ManejadorInstaPulse((ruta, _) => ruta.EndsWith("/start/meta")
+            ? Json_(HttpStatusCode.OK, """{"success":false,"error":"Ventana de 24 h cerrada"}""") : RespuestaOk(ruta))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(exitoFalso.Ok);
+        Assert.Contains("Ventana de 24 h cerrada", exitoFalso.Error);
+
+        var noJson = await InstaPulse(new ManejadorInstaPulse((_, _) => Json_(HttpStatusCode.OK, "<html>proxy</html>"))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(noJson.Ok);
+        Assert.Contains("no es JSON", noJson.Error);
+    }
+
+    [Fact]
+    public async Task InstaPulse_SinConexion_EsReintentable()
+    {
+        var r = await InstaPulse(new ManejadorInstaPulse((_, _) => throw new HttpRequestException("sin red"))).EnviarPlantillaAsync("56912345678", "solicitud_boleta", ["Ana"]);
+        Assert.False(r.Ok);
+        Assert.True(r.Reintentable);
+        Assert.Contains("InstaPulse", r.Error);
+    }
+
+    [Fact]
+    public void Opciones_InstaPulseEsUnProveedorValidoYPideSuPropiaConfiguracion()
+    {
+        var o = new OpcionesWhatsApp { Proveedor = "instapulse", PhoneNumberId = "1", AccessToken = "t" };
+        Assert.True(o.UsaInstaPulse);
+        Assert.True(o.ProveedorValido);
+        Assert.False(o.Configurado);                     // las credenciales de Meta no sirven para InstaPulse
+        o.InstaPulse = new OpcionesInstaPulse { UrlBase = "https://x/api", Pautas = { ["solicitud_boleta"] = 1 } };
+        Assert.True(o.Configurado);
+        o.InstaPulse.Pautas.Clear();
+        Assert.False(o.Configurado);
+    }
+
     // ---- Los tres avisos, en el flujo real ----
 
     private static async Task<(Planilla P, Prestador Fra)> PlanillaConPrestadorAsync(Entorno e)

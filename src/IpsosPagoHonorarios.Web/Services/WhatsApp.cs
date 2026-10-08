@@ -15,9 +15,10 @@ namespace IpsosPagoHonorarios.Web.Services;
 public class OpcionesWhatsApp
 {
     public bool Habilitado { get; set; }
-    /// <summary>Quién entrega los mensajes: "Meta" (API Cloud directa) o "Twilio".</summary>
+    /// <summary>Quién entrega los mensajes: "Meta" (API Cloud directa), "Twilio" o "InstaPulse" (pasarela interna que envía por Meta).</summary>
     public string Proveedor { get; set; } = "Meta";
     public OpcionesTwilio Twilio { get; set; } = new();
+    public OpcionesInstaPulse InstaPulse { get; set; } = new();
     public string UrlBase { get; set; } = "https://graph.facebook.com";
     public string ApiVersion { get; set; } = "v21.0";
     /// <summary>Identificador del número de teléfono de WhatsApp Business (no es el número en sí).</summary>
@@ -32,9 +33,12 @@ public class OpcionesWhatsApp
     public string PlantillaObservada { get; set; } = "boleta_observada";
 
     public bool UsaTwilio => string.Equals(Proveedor, "Twilio", StringComparison.OrdinalIgnoreCase);
-    public bool ProveedorValido => UsaTwilio || string.Equals(Proveedor, "Meta", StringComparison.OrdinalIgnoreCase);
+    public bool UsaInstaPulse => string.Equals(Proveedor, "InstaPulse", StringComparison.OrdinalIgnoreCase);
+    public bool ProveedorValido => UsaTwilio || UsaInstaPulse || string.Equals(Proveedor, "Meta", StringComparison.OrdinalIgnoreCase);
 
-    public bool Configurado => UsaTwilio ? Twilio.Configurado : !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
+    public bool Configurado => UsaTwilio ? Twilio.Configurado
+        : UsaInstaPulse ? InstaPulse.Configurado
+        : !string.IsNullOrWhiteSpace(PhoneNumberId) && !string.IsNullOrWhiteSpace(AccessToken);
 }
 
 /// <summary>
@@ -55,6 +59,26 @@ public class OpcionesTwilio
 
     public bool Configurado => !string.IsNullOrWhiteSpace(AccountSid) && !string.IsNullOrWhiteSpace(AuthToken)
                                && (!string.IsNullOrWhiteSpace(From) || !string.IsNullOrWhiteSpace(MessagingServiceSid));
+}
+
+/// <summary>
+/// WhatsApp a través de InstaPulse, la pasarela interna que envía por la API de Meta. Cada mensaje recorre 4 pasos
+/// (participante, caso, sesión con una pauta y disparo). La pauta ya guarda el número de WhatsApp, el token de Meta y la
+/// plantilla aprobada, por eso aquí no hay secretos: <see cref="Pautas"/> relaciona el nombre de cada plantilla de la
+/// aplicación (p. ej. solicitud_boleta) con el PautaID creado en InstaPulse.
+/// </summary>
+public class OpcionesInstaPulse
+{
+    /// <summary>Dirección de la API, p. ej. https://servidor/InstaPulseAPI2.</summary>
+    public string? UrlBase { get; set; }
+    /// <summary>Valor del encabezado x-remote-user: define el proyecto (tenant) en InstaPulse.</summary>
+    public string UsuarioRemoto { get; set; } = "IAOps";
+    public Dictionary<string, int> Pautas { get; set; } = new();
+    /// <summary>Deja la sesión activa para que InstaPulse asocie las respuestas del prestador.</summary>
+    public bool MarcarActiva { get; set; } = true;
+    public string TituloCaso { get; set; } = "Pago de Honorarios";
+
+    public bool Configurado => !string.IsNullOrWhiteSpace(UrlBase) && !string.IsNullOrWhiteSpace(UsuarioRemoto) && Pautas.Count > 0;
 }
 
 public sealed record ResultadoEnvio(bool Ok, string? ProveedorId, string? Error, bool Reintentable);
@@ -205,6 +229,113 @@ public class ProveedorWhatsAppTwilio(HttpClient http, IOptions<OpcionesWhatsApp>
         }
         catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return $"HTTP {http}"; }
     }
+}
+
+/// <summary>
+/// Envío por InstaPulse (manual de integración de eventos y sistemas de pago): POST /participantes, /casos,
+/// /casos/{id}/sessions y /sessions/{id}/start/meta. Las variables viajan ordenadas en body_params y también como metadata
+/// p1, p2… (la pauta puede declarar "variables": ["p1","p2",…]).
+/// </summary>
+public class ProveedorWhatsAppInstaPulse(HttpClient http, IOptions<OpcionesWhatsApp> op) : IProveedorWhatsApp
+{
+    private sealed record Paso(JsonElement? Json, ResultadoEnvio? Falla);
+
+    public async Task<ResultadoEnvio> EnviarPlantillaAsync(string para, string plantilla, IReadOnlyList<string> parametros, CancellationToken ct = default)
+    {
+        var o = op.Value;
+        var ip = o.InstaPulse;
+        if (!ip.Configurado) return new(false, null, "InstaPulse no está configurado: faltan UrlBase, UsuarioRemoto o Pautas.", false);
+        if (!ip.Pautas.TryGetValue(plantilla, out var pautaId) || pautaId <= 0)
+            return new(false, null, $"InstaPulse: falta la pauta de la plantilla “{plantilla}” (WhatsApp:InstaPulse:Pautas).", false);
+
+        var telefono = "+" + para.TrimStart('+');
+        var nombre = parametros.Count > 0 && !string.IsNullOrWhiteSpace(parametros[0]) ? parametros[0] : "Prestador";
+        var metadata = new Dictionary<string, string> { ["origen"] = "PagoHonorarios", ["plantilla"] = plantilla };
+        for (var i = 0; i < parametros.Count; i++) metadata[$"p{i + 1}"] = parametros[i];
+
+        try
+        {
+            var participante = await PostAsync(ip, "/participantes", new { phone = telefono, name = nombre, language = o.Idioma, metadata }, "paso 1 (participantes)", ct);
+            if (participante.Falla is { } f1) return f1;
+
+            var caso = await PostAsync(ip, "/casos", new { phone_number = telefono, titulo = $"{ip.TituloCaso} · {plantilla}" }, "paso 2 (casos)", ct);
+            if (caso.Falla is { } f2) return f2;
+            if (Texto(caso.Json, "caso_id") is not { } casoId) return new(false, null, "InstaPulse paso 2 (casos): la respuesta no trae caso_id.", false);
+
+            var sesion = await PostAsync(ip, $"/casos/{Uri.EscapeDataString(casoId)}/sessions",
+                new { pauta_id = pautaId, incluir_en_historial_global = false }, "paso 3 (sesión)", ct);
+            if (sesion.Falla is { } f3) return f3;
+            if (Texto(sesion.Json, "session_id") is not { } sesionId) return new(false, null, "InstaPulse paso 3 (sesión): la respuesta no trae session_id.", false);
+
+            var envio = await PostAsync(ip, $"/sessions/{Uri.EscapeDataString(sesionId)}/start/meta",
+                new { language_code = o.Idioma, body_params = parametros, mark_active = ip.MarcarActiva, mode = (string?)null }, "paso 4 (start/meta)", ct);
+            if (envio.Falla is { } f4) return f4;
+            if (envio.Json is { ValueKind: JsonValueKind.Object } j && j.TryGetProperty("success", out var exito) && exito.ValueKind == JsonValueKind.False)
+                return new(false, null, "InstaPulse paso 4 (start/meta): " + Detalle(j.GetRawText()), EsTransitorio(j.GetRawText()));
+            return new(true, Texto(envio.Json, "message_id") ?? sesionId, null, false);
+        }
+        catch (HttpRequestException ex)
+        {
+            return new(false, null, "Sin conexión con InstaPulse: " + ex.Message, true);
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return new(false, null, "InstaPulse no respondió a tiempo.", true);
+        }
+    }
+
+    private async Task<Paso> PostAsync(OpcionesInstaPulse ip, string ruta, object cuerpo, string paso, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, ip.UrlBase!.TrimEnd('/') + ruta)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(cuerpo), Encoding.UTF8, "application/json")
+        };
+        req.Headers.Add("x-remote-user", ip.UsuarioRemoto);
+        using var resp = await http.SendAsync(req, ct);
+        var texto = await resp.Content.ReadAsStringAsync(ct);
+        var codigo = (int)resp.StatusCode;
+        if (!resp.IsSuccessStatusCode)
+            return new(null, new(false, null, $"InstaPulse {paso}: HTTP {codigo}: {Detalle(texto)}", codigo == 429 || (codigo >= 500 && EsTransitorio(texto))));
+        try
+        {
+            using var d = JsonDocument.Parse(texto);
+            return new(d.RootElement.Clone(), null);
+        }
+        catch (JsonException)
+        {
+            return new(null, new(false, null, $"InstaPulse {paso}: la respuesta no es JSON.", false));
+        }
+    }
+
+    private static string? Texto(JsonElement? j, string campo) =>
+        j is { ValueKind: JsonValueKind.Object } e && e.TryGetProperty(campo, out var v) && v.ValueKind is JsonValueKind.String or JsonValueKind.Number
+            ? v.ToString() is { Length: > 0 } t ? t : null : null;
+
+    /// <summary>Errores de Meta que se repiten igual en cada intento (plantilla inexistente, variables, número sin WhatsApp…).</summary>
+    private static readonly string[] CodigosDefinitivos = ["131026", "132000", "132001", "132005", "132007", "132012", "132015", "132016", "133010"];
+
+    private static bool EsTransitorio(string texto) => !CodigosDefinitivos.Any(texto.Contains);
+
+    /// <summary>Mensaje de error de InstaPulse (FastAPI: "detail"; también "message" o "error").</summary>
+    internal static string Detalle(string texto)
+    {
+        try
+        {
+            using var d = JsonDocument.Parse(texto);
+            var r = d.RootElement;
+            if (r.ValueKind == JsonValueKind.Object)
+                foreach (var campo in new[] { "detail", "message", "error" })
+                    if (r.TryGetProperty(campo, out var v))
+                    {
+                        var t = v.ValueKind == JsonValueKind.String ? v.GetString() : v.GetRawText();
+                        if (!string.IsNullOrWhiteSpace(t)) return Cortar(t!);
+                    }
+        }
+        catch (JsonException) { }
+        return Cortar(string.IsNullOrWhiteSpace(texto) ? "sin detalle" : texto.Trim());
+    }
+
+    private static string Cortar(string t) => t.Length > 400 ? t[..400] : t;
 }
 
 /// <summary>Envía la bandeja pendiente con reintentos (2 y 10 minutos) para fallas transitorias.</summary>

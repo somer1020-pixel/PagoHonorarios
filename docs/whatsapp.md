@@ -1,8 +1,9 @@
 # Avisos por WhatsApp
 
-La aplicación puede avisar por WhatsApp a los prestadores cuando deben subir su boleta. Puede enviarlos de dos formas,
+La aplicación puede avisar por WhatsApp a los prestadores cuando deben subir su boleta. Puede enviarlos de tres formas,
 que se elige con `WhatsApp:Proveedor`:
 
+- **`InstaPulse`**: a través de la plataforma de integración de IA Ops, que envía por Meta con sus propias pautas y números.
 - **`Twilio`**: a través de Twilio, con un número de WhatsApp propio aprobado en Twilio.
 - **`Meta`** (valor por defecto): directo con la API de WhatsApp Business (Cloud API de Meta).
 
@@ -41,6 +42,67 @@ WhatsApp exige consentimiento previo. Hay dos formas de registrarlo, y ambas gua
   WhatsApp", si el prestador lo pidió por otro medio.
 
 La tarjeta del portal solo aparece cuando el canal está activado.
+
+## Puesta en marcha con InstaPulse (envío por Meta)
+
+InstaPulse es la plataforma interna que administra los números de WhatsApp de Meta y sus plantillas. La aplicación no
+guarda tokens de Meta: solo llama a la API de InstaPulse (`x-remote-user: IAOps`), que usa la **Pauta** configurada allí.
+
+Por cada aviso la aplicación ejecuta los 4 pasos del manual de integración:
+
+1. `POST /participantes` — crea o actualiza al participante (`phone` `+56…`, `name`, `language`, `metadata`).
+2. `POST /casos` — abre un caso (`phone_number`, `titulo` = `Pago de Honorarios`).
+3. `POST /casos/{caso_id}/sessions` — crea la sesión con la `pauta_id` (`incluir_en_historial_global: false`).
+4. `POST /sessions/{session_id}/start/meta` — envía la plantilla (`template_name`, `language_code`, `body_params` en orden, `mark_active`).
+
+**Qué debe entregar el administrador de InstaPulse**
+
+- La **URL base** de la API.
+- Una **Pauta** con canal `META` por cada plantilla (o una sola si comparten número): su `PautaID`, el `PHONE_ID`, la
+  variable de entorno del `TOKEN` y `TemplatesInicioJSON` con las plantillas aprobadas. Ejemplo para `solicitud_boleta`:
+
+  ```json
+  [{ "sid": "solicitud_boleta",
+     "text": "Hola {{1}}, tu pago del ciclo {{2}} ya está listo para boletear. Emite una sola boleta de honorarios por {{3}} bruto y súbela en el portal de boletas antes del {{4}}. Gracias.",
+     "variables": ["p1", "p2", "p3", "p4"], "header_variables": [] }]
+  ```
+
+  `recordatorio_boleta` usa `p1`…`p3` y `boleta_observada` también `p1`…`p3` (textos de la sección de Meta, más abajo).
+  El `sid` es el nombre de la plantilla aprobada en Meta.
+
+**Configuración del servidor** (`appsettings.Production.json`, ignorado por git):
+
+```json
+"WhatsApp": {
+  "Habilitado": true,
+  "Proveedor": "InstaPulse",
+  "Idioma": "es",
+  "InstaPulse": {
+    "UrlBase": "https://<host-instapulse>/api",
+    "UsuarioRemoto": "IAOps",
+    "Pautas": {
+      "solicitud_boleta": 101,
+      "recordatorio_boleta": 102,
+      "boleta_observada": 103
+    }
+  }
+}
+```
+
+- Las claves de `Pautas` son los nombres de plantilla de la aplicación; el valor es el `PautaID`. Una plantilla sin
+  pauta falla con un error claro y no se reintenta.
+- Los parámetros viajan en orden como `body_params` (`p1`, `p2`…) y también quedan en `metadata` del participante.
+- `MarcarActiva` (por defecto `true`) corresponde a `mark_active`; `TituloCaso` cambia el título del caso.
+- El servidor IIS debe **confiar en el certificado** de InstaPulse y tener salida de red hacia su URL.
+- Reiniciar la aplicación y usar **Maestros → Parámetros → Avisos por WhatsApp → Enviar prueba** (debe decir *Proveedor: InstaPulse*).
+
+Errores: cada falla indica el paso (`paso 1 (participantes)` … `paso 4 (start/meta)`) y el detalle que devolvió InstaPulse.
+Se reintenta ante red, 429 y 5xx; no se reintenta una respuesta `success:false` ni los códigos permanentes de Meta
+(plantilla inexistente, número sin WhatsApp, etc.). Un reintento posterior al paso 3 repite todo el flujo y puede dejar
+un caso extra en InstaPulse.
+
+**Consentimiento.** El manual indica que las plantillas UTILITY no requieren opt-in promocional, pero la aplicación
+sigue enviando solo a prestadores que autorizaron WhatsApp. Si se quiere relajar, es un cambio acotado en el encolado.
 
 ## Puesta en marcha con Twilio
 
