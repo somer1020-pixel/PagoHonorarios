@@ -48,6 +48,13 @@ else {
     Write-Host "Falta crear $secretos. Después de crearlo, vuelve a ejecutar este script para protegerlo."
 }
 
+# Sin esta regla el sitio responde en el servidor pero no desde otras máquinas.
+$regla = "Pago Honorarios (puerto $Puerto)"
+if (-not (Get-NetFirewallRule -DisplayName $regla -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName $regla -Direction Inbound -Protocol TCP -LocalPort $Puerto -Action Allow | Out-Null
+    Write-Host "Regla de firewall creada para el puerto $Puerto."
+}
+
 Write-Host ""
 Write-Host "Listo. Sitio '$Nombre' en el puerto $Puerto, aplicación en $app, archivos en $archivos."
 Write-Host "Siguiente: copiar la aplicación a $app, crear appsettings.Production.json y abrir http://localhost:$Puerto/Cuenta/Login"

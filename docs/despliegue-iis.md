@@ -161,6 +161,10 @@ icacls $f /grant "Administrators:F" "SYSTEM:F" "${env:USERDOMAIN}\${env:USERNAME
 
 - **HTTP 500.30 / 502**: en `web.config`, cambia `stdoutLogEnabled="false"` a `"true"` y revisa `app\logs\stdout_*.log`.
   Causas típicas: Hosting Bundle sin instalar (o sin `iisreset`), cadena de conexión incorrecta, o permisos (pasos 4 y 5).
+- **Funciona en el servidor pero no desde otra máquina**: falta abrir el puerto en el Firewall de Windows. En PowerShell como administrador:
+  `New-NetFirewallRule -DisplayName "Pago Honorarios (puerto 8080)" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow`
+  (el script `instalar-iis.ps1` actual ya lo crea). Prueba desde la otra máquina con `Test-NetConnection AMCLSANSQL9 -Port 8080`.
+- **Error 500 después de iniciar sesión**: activa el log (`stdoutLogEnabled="true"` en `web.config`, carpeta `app\logs` con permiso de escritura) o mira el Visor de eventos → Aplicación, repite la acción y busca la excepción.
 - **Error al conectar con SQL**: prueba el mismo usuario y clave con `sqlcmd -S AMCLSANSQL9 -U user_sql -d BD_PagoIpsos`.
 - **Dice que falta una tabla o columna**: falta aplicar las migraciones (paso 1) o `user_sql` no tiene `db_ddladmin`.
 
