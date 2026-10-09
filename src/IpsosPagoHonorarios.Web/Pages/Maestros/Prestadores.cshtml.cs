@@ -49,12 +49,12 @@ public class PrestadoresModel(AppDbContext db, PrestadoresService prestadores, C
     public static (Tono, string) Portal(Prestador p) =>
         p.PortalActivadoEn is not null ? (Tono.Success, "Activado") : p.PortalInvitadoEn is not null ? (Tono.Info, "Invitado") : (Tono.Neutral, "Sin invitar");
 
-    public async Task<IActionResult> OnPostGuardarAsync(string nombre, string rut, string? email, string? telefono, bool whatsApp)
+    public async Task<IActionResult> OnPostGuardarAsync(string nombre, string rut, string? email, string? telefono)
     {
         if (!PuedeEditar) return Forbid();
         try
         {
-            var p = await prestadores.GuardarAsync(Id, nombre, rut, email, telefono, whatsApp);
+            var p = await prestadores.GuardarAsync(Id, nombre, rut, email, telefono);
             MensajeOk = "Prestador guardado.";
             return RedirectToPage(new { id = p.Id });
         }

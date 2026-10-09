@@ -269,9 +269,9 @@ public class BoletaService(
         if (string.IsNullOrWhiteSpace(motivo)) throw new ReglaException("Indica el motivo.");
         b.Estado = BoletaEstado.Observada;
         auditor.Registrar(nameof(BoletaHonorarios), b.Id, "Pedir nueva boleta", motivo);
-        correos.Encolar(b.Prestador.Email, "Tu boleta fue observada",
-            $"Hola {b.Prestador.NombreCompleto}: tu boleta N° {b.NumeroBoleta} fue observada. Motivo: {motivo}. Sube una nueva desde el portal.");
-        await correos.EncolarBoletaObservadaAsync(b.Prestador, motivo, "a la brevedad");
+        if (!await correos.EncolarBoletaObservadaAsync(b.Prestador, motivo, "a la brevedad"))
+            correos.Encolar(b.Prestador.Email, "Tu boleta fue observada",
+                $"Hola {b.Prestador.NombreCompleto}: tu boleta N° {b.NumeroBoleta} fue observada. Motivo: {motivo}. Sube una nueva desde el portal.");
         await db.SaveChangesAsync();
     }
 
@@ -284,9 +284,9 @@ public class BoletaService(
         var limite = Conciliacion.FechaLimite(p.Ciclo.Periodo, par.DiaLimiteBoleta);
         foreach (var prest in pendientes)
         {
-            correos.Encolar(prest.Email, $"Recordatorio: sube tu boleta de {p.Ciclo.Codigo}",
-                $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Titulo}. Plazo de emisión hasta el {Formato.Fecha(limite)}.");
-            await correos.EncolarRecordatorioBoletaAsync(prest, p.Ciclo.Codigo, limite);
+            if (!await correos.EncolarRecordatorioBoletaAsync(prest, p.Ciclo.Codigo, limite))
+                correos.Encolar(prest.Email, $"Recordatorio: sube tu boleta de {p.Ciclo.Codigo}",
+                    $"Hola {prest.NombreCompleto}: aún no recibimos tu boleta para la planilla {p.Titulo}. Plazo de emisión hasta el {Formato.Fecha(limite)}.");
         }
         auditor.Registrar(nameof(Planilla), p.Id, "Recordar a pendientes", $"{pendientes.Count} prestadores");
         await db.SaveChangesAsync();

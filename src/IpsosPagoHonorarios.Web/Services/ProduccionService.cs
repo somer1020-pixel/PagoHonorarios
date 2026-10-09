@@ -225,9 +225,10 @@ public class ProduccionService(
         foreach (var g in completa.Activas().GroupBy(l => l.Prestador))
         {
             var (bruto, ret, liq) = Montos.PorBoleta(g.Select(l => l.ValorTotalBruto), tasa);
-            correos.Encolar(g.Key.Email, $"Tu pago de {ciclo.Codigo} está listo para boletear",
-                $"Hola {g.Key.NombreCompleto}: emite una sola boleta por {Formato.Clp(bruto)} (retención {Formato.Clp(ret)}, recibirás {Formato.Clp(liq)}) y súbela en el portal.");
-            await correos.EncolarSolicitudBoletaAsync(g.Key, ciclo.Codigo, bruto, limiteBoleta);
+            // Con celular válido el aviso va por WhatsApp; si no, por correo.
+            if (!await correos.EncolarSolicitudBoletaAsync(g.Key, ciclo.Codigo, bruto, limiteBoleta))
+                correos.Encolar(g.Key.Email, $"Tu pago de {ciclo.Codigo} está listo para boletear",
+                    $"Hola {g.Key.NombreCompleto}: emite una sola boleta por {Formato.Clp(bruto)} (retención {Formato.Clp(ret)}, recibirás {Formato.Clp(liq)}) y súbela en el portal.");
         }
         await db.SaveChangesAsync();
         await tx.CommitAsync();

@@ -132,43 +132,45 @@ public class Correos(AppDbContext db, TimeProvider reloj, ILogger<Correos> log, 
     private OpcionesWhatsApp Wa => whatsapp?.Value ?? new();
 
     /// <summary>Primer aviso: el pago está listo para boletear. Variables: nombre, ciclo, monto bruto, fecha límite.</summary>
-    public Task EncolarSolicitudBoletaAsync(Prestador p, string ciclo, decimal bruto, DateOnly limite) =>
+    public Task<bool> EncolarSolicitudBoletaAsync(Prestador p, string ciclo, decimal bruto, DateOnly limite) =>
         EncolarWhatsAppAsync(p, Wa.PlantillaSolicitud,
             $"Hola {p.NombreCompleto}: tu pago de {ciclo} está listo para boletear. Emite una sola boleta por {Formato.Clp(bruto)} y súbela en el portal antes del {Formato.Fecha(limite)}.",
             p.NombreCompleto, ciclo, Formato.Clp(bruto), Formato.Fecha(limite));
 
     /// <summary>Recordatorio a quien aún no sube su boleta. Variables: nombre, ciclo, fecha límite.</summary>
-    public Task EncolarRecordatorioBoletaAsync(Prestador p, string ciclo, DateOnly limite) =>
+    public Task<bool> EncolarRecordatorioBoletaAsync(Prestador p, string ciclo, DateOnly limite) =>
         EncolarWhatsAppAsync(p, Wa.PlantillaRecordatorio,
             $"Hola {p.NombreCompleto}: aún no recibimos tu boleta de {ciclo}. Súbela en el portal antes del {Formato.Fecha(limite)}.",
             p.NombreCompleto, ciclo, Formato.Fecha(limite));
 
     /// <summary>Boleta observada: debe subir una nueva. Variables: nombre, motivo, cuándo (“hasta las 22:52” / “a la brevedad”).</summary>
-    public Task EncolarBoletaObservadaAsync(Prestador p, string motivo, string cuando) =>
+    public Task<bool> EncolarBoletaObservadaAsync(Prestador p, string motivo, string cuando) =>
         EncolarWhatsAppAsync(p, Wa.PlantillaObservada,
             $"Hola {p.NombreCompleto}: tu boleta fue observada. Motivo: {motivo}. Sube una nueva boleta en el portal {cuando}.",
             p.NombreCompleto, motivo, cuando);
 
     /// <summary>
-    /// Encola un WhatsApp si el canal está habilitado, el prestador lo autorizó y su teléfono es un celular válido.
-    /// No repite el mismo aviso (mismas variables) al mismo número dentro de 24 horas, p. ej. al reimportar una planilla.
+    /// Regla de los avisos de boleta: si el prestador tiene un celular válido y el canal está habilitado, el aviso sale por
+    /// WhatsApp; si no, el llamador lo manda por correo. Devuelve true cuando el canal es WhatsApp (aunque no se encole
+    /// porque ya se envió el mismo aviso en las últimas 24 horas: así no se manda además por correo).
     /// </summary>
-    public async Task EncolarWhatsAppAsync(Prestador p, string plantilla, string texto, params string[] parametros)
+    public async Task<bool> EncolarWhatsAppAsync(Prestador p, string plantilla, string texto, params string[] parametros)
     {
-        if (!Wa.Habilitado || !p.WhatsAppAutorizado) return;
+        if (!Wa.Habilitado) return false;
         var para = Telefono.NormalizarWhatsApp(p.Telefono);
-        if (para is null) return;
+        if (para is null) return false;
         var json = Json.Serializar(parametros.Select(LimpiarParametro).ToList());
         var desde = reloj.GetUtcNow().UtcDateTime.AddHours(-24);
         var repetido = db.WhatsApp.Local.Any(m => m.Para == para && m.Plantilla == plantilla && m.CreadoEn >= desde && m.Parametros == json)
                        || await db.WhatsApp.AnyAsync(m => m.Para == para && m.Plantilla == plantilla && m.CreadoEn >= desde && m.Parametros == json);
-        if (repetido) return;
+        if (repetido) return true;
         db.WhatsApp.Add(new WhatsAppSaliente
         {
             CreadoEn = reloj.GetUtcNow().UtcDateTime, PrestadorId = p.Id == 0 ? null : p.Id, Para = para, Plantilla = plantilla,
             Parametros = json, Texto = texto.Length > 1000 ? texto[..1000] : texto
         });
         log.LogInformation("WhatsApp encolado ({Plantilla}) para ****{Fin}", plantilla, para[^4..]);
+        return true;
     }
 
     /// <summary>WhatsApp no admite saltos de línea, tabulaciones ni más de 4 espacios seguidos en una variable, ni variables vacías.</summary>

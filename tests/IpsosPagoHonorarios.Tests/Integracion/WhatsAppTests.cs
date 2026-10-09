@@ -40,17 +40,16 @@ public class WhatsAppTests
         return e;
     }
 
-    private static Prestador Autorizado(Entorno e, string telefono = "+56 9 1234 5678", bool autoriza = true)
+    private static Prestador Autorizado(Entorno e, string telefono = "+56 9 1234 5678")
     {
         var p = e.Prestador("Francisca Silva Morales", "13987654-7", "CORRIENTE", "0068123456", "SANTANDER");
         p.Telefono = telefono;
-        p.WhatsAppAutorizado = autoriza;
         e.Db.SaveChanges();
         return p;
     }
 
     [Fact]
-    public async Task Encolar_ExigeCanalActivo_Autorizacion_YCelularValido()
+    public async Task Encolar_ExigeCanalActivo_YCelularValido()
     {
         using var e = new Entorno();   // apagado
         var p = Autorizado(e);
@@ -59,12 +58,6 @@ public class WhatsAppTests
         Assert.Empty(await e.Db.WhatsApp.ToListAsync());                       // canal desactivado
 
         e.WhatsApp.Habilitado = true;
-        p.WhatsAppAutorizado = false;
-        await e.Correos.EncolarSolicitudBoletaAsync(p, "OCT-2026", 331500m, Limite);
-        await e.Db.SaveChangesAsync();
-        Assert.Empty(await e.Db.WhatsApp.ToListAsync());                       // sin consentimiento
-
-        p.WhatsAppAutorizado = true;
         p.Telefono = "22 123 4567";
         await e.Correos.EncolarSolicitudBoletaAsync(p, "OCT-2026", 331500m, Limite);
         await e.Db.SaveChangesAsync();
@@ -648,13 +641,34 @@ public class WhatsAppTests
     }
 
     [Fact]
-    public async Task Aviso_SinAutorizacion_NoSeEnviaWhatsApp_PeroSiElCorreo()
+    public async Task Aviso_ConCelular_VaPorWhatsApp_SinCorreo_YSinCelular_VaPorCorreo()
     {
         using var e = Activado();
-        var fra = Autorizado(e, autoriza: false);
-        await e.PlanillaAsync("FACE TO FACE", new Fila(fra, "260041200105", Entorno.E, 6500, 51));
-        Assert.Empty(await e.Db.WhatsApp.ToListAsync());
-        Assert.Contains(await e.Db.Correos.ToListAsync(), c => c.Asunto.Contains("listo para boletear"));
+        var con = Autorizado(e);
+        var sin = e.Prestador("Sin Celular Perez", "11111111-1", "CORRIENTE", "0068123499", "SANTANDER");
+        sin.Telefono = null;
+        sin.Email = "sin@celular.cl";
+        con.Email = "con@celular.cl";
+        e.Db.SaveChanges();
+        await e.PlanillaAsync("FACE TO FACE", new Fila(con, "260041200105", Entorno.E, 6500, 51), new Fila(sin, "260041200105", Entorno.E, 6500, 51));
+        var wa = await e.Db.WhatsApp.ToListAsync();
+        Assert.Single(wa);                                                       // solo el que tiene celular
+        var correos = await e.Db.Correos.Where(c => c.Asunto.Contains("listo para boletear")).ToListAsync();
+        Assert.Equal(["sin@celular.cl"], correos.Select(c => c.Para));            // y el correo, solo al que no
+    }
+
+    [Fact]
+    public async Task Aviso_Repetido_NoCaeAlCorreo()
+    {
+        using var e = Activado();
+        var con = Autorizado(e);
+        con.Email = "con@celular.cl";
+        e.Db.SaveChanges();
+        var (pl, _) = (await e.PlanillaAsync("FACE TO FACE", new Fila(con, "260041200105", Entorno.E, 6500, 51)), con);
+        await e.Boletas.RecordarPendientesAsync(pl.Id);
+        await e.Boletas.RecordarPendientesAsync(pl.Id);                          // mismo aviso dentro de 24 h: no se repite
+        Assert.Single(await e.Db.WhatsApp.Where(m => m.Plantilla == "recordatorio_boleta").ToListAsync());
+        Assert.DoesNotContain(await e.Db.Correos.ToListAsync(), c => c.Asunto.StartsWith("Recordatorio"));
     }
 
     [Fact]

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace IpsosPagoHonorarios.Web.Pages.Portal;
 
 /// <summary>Portal del prestador (R-17 a R-19): solo sus filas, solo su boleta.</summary>
-public class IndexModel(AppDbContext db, PortalService portal, BoletaService boletas, Parametros parametros, PrestadoresService prestadores, IOptions<OpcionesWhatsApp> whatsapp) : PageModel
+public class IndexModel(AppDbContext db, PortalService portal, BoletaService boletas, Parametros parametros) : PageModel
 {
     public sealed record Chequeo(bool Ok, string Texto);
 
@@ -21,7 +21,6 @@ public class IndexModel(AppDbContext db, PortalService portal, BoletaService bol
     [TempData] public string? Resultado { get; set; }
     [TempData] public string? Error { get; set; }
     [TempData] public string? Aviso { get; set; }
-    public bool WhatsAppDisponible => whatsapp.Value.Habilitado;
     [TempData] public int? PlanillaResultado { get; set; }
 
     public List<Chequeo> Chequeos => Resultado is null ? [] : Json.Leer<List<Chequeo>>(Resultado) ?? [];
@@ -70,18 +69,6 @@ public class IndexModel(AppDbContext db, PortalService portal, BoletaService bol
             foreach (var p in r.Conciliacion.Problemas.Where(p => p.Contains("anulada") || p.Contains("ya se usó")))
                 lista.Add(new(false, p));
             Resultado = Json.Serializar(lista);
-        }
-        catch (ReglaException ex) { Error = ex.Message; }
-        return RedirectToPage();
-    }
-    /// <summary>El prestador indica su celular y si acepta avisos por WhatsApp (solicitud y recordatorio de boleta).</summary>
-    public async Task<IActionResult> OnPostWhatsAppAsync(string? telefono, bool acepta)
-    {
-        if (PrestadorId is not { } id) return Forbid();
-        try
-        {
-            await prestadores.ConfigurarWhatsAppAsync(id, telefono, acepta);
-            Aviso = acepta ? "Listo: te avisaremos por WhatsApp cuando haya que subir una boleta." : "Quitamos los avisos por WhatsApp. Seguirás recibiendo correos.";
         }
         catch (ReglaException ex) { Error = ex.Message; }
         return RedirectToPage();

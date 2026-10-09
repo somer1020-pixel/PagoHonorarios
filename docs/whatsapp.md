@@ -7,9 +7,8 @@ que se elige con `WhatsApp:Proveedor`:
 - **`Twilio`**: a través de Twilio, con un número de WhatsApp propio aprobado en Twilio.
 - **`Meta`** (valor por defecto): directo con la API de WhatsApp Business (Cloud API de Meta).
 
-En ambos casos WhatsApp solo permite iniciar una conversación con **plantillas** aprobadas, y solo con personas que
-dieron su consentimiento; la aplicación respeta ambas reglas. Todo lo demás (cuándo se avisa, consentimiento,
-reintentos, pantalla de seguimiento) funciona igual con cualquiera de los dos.
+Con cualquiera de los tres, WhatsApp solo permite iniciar una conversación con **plantillas** aprobadas, y la
+aplicación solo usa esas. Todo lo demás (cuándo se avisa, reintentos, pantalla de seguimiento) funciona igual.
 
 ## Cuándo se envía
 
@@ -19,29 +18,24 @@ reintentos, pantalla de seguimiento) funciona igual con cualquiera de los dos.
 | Recordatorio | Cuando Operaciones o Finanzas usa **Recordar** en Seguimiento de boletas (solo a quien aún no sube su boleta) | `recordatorio_boleta` |
 | Boleta observada | Al pedir una nueva boleta o al devolver la planilla con observaciones de boleta | `boleta_observada` |
 
-Los correos siguen enviándose como antes. WhatsApp es un canal adicional.
+**Regla del canal:** si el prestador tiene un **celular válido**, el aviso sale por **WhatsApp** (y no por correo). Si no
+tiene teléfono (o es un fijo) y tiene correo, sale por **correo**. Si el canal de WhatsApp está desactivado, todos salen
+por correo.
 
-Un mensaje solo se envía si se cumplen **todas** estas condiciones:
+El aviso por WhatsApp se envía si se cumplen estas condiciones:
 
 1. El canal está activado (`WhatsApp:Habilitado = true`) y tiene credenciales.
-2. El prestador **autorizó** recibir WhatsApp (ver más abajo).
-3. Su teléfono es un **celular** válido: chileno (`9 1234 5678`, `+56 9 1234 5678`) o internacional con `+`. Los fijos no tienen WhatsApp.
-4. No se envió el mismo aviso (mismos datos) a ese número en las últimas 24 horas. Así, reimportar una planilla no repite el mensaje.
+2. Su teléfono es un **celular** válido: chileno (`9 1234 5678`, `+56 9 1234 5678`) o internacional con `+`. Los fijos no tienen WhatsApp.
+3. No se envió el mismo aviso (mismos datos) a ese número en las últimas 24 horas. Así, reimportar una planilla o
+   repetir **Recordar** no duplica el mensaje (y tampoco lo manda por correo).
+
+La aplicación decide el canal por el teléfono guardado en **Maestros → Prestadores**; no pide una autorización aparte.
+Si WhatsApp rechaza después el mensaje (número sin WhatsApp, plantilla no aprobada), el aviso queda como fallido en la
+bandeja y **no se reenvía por correo**: se ve en Parámetros y en la tabla `WhatsApp`.
 
 Si Meta no puede entregar el mensaje por una falla transitoria (red, límite de velocidad, error 5xx), la aplicación
 reintenta a los 2 y a los 10 minutos (3 intentos en total). Los errores definitivos (plantilla inexistente, número sin
 WhatsApp, token inválido) no se reintentan y quedan registrados con el motivo.
-
-## Consentimiento del prestador
-
-WhatsApp exige consentimiento previo. Hay dos formas de registrarlo, y ambas guardan la fecha:
-
-- **El propio prestador**, en el portal (tarjeta **Avisos por WhatsApp**): indica su celular y marca la casilla. Es la
-  forma recomendada, porque queda su consentimiento explícito. Puede retirarlo cuando quiera.
-- **Operaciones o Finanzas**, en **Maestros → Prestadores**, con la casilla "El prestador autorizó recibir avisos por
-  WhatsApp", si el prestador lo pidió por otro medio.
-
-La tarjeta del portal solo aparece cuando el canal está activado.
 
 ## Puesta en marcha con InstaPulse (envío por Meta)
 
@@ -101,8 +95,8 @@ Se reintenta ante red, 429 y 5xx; no se reintenta una respuesta `success:false` 
 (plantilla inexistente, número sin WhatsApp, etc.). Un reintento posterior al paso 3 repite todo el flujo y puede dejar
 un caso extra en InstaPulse.
 
-**Consentimiento.** El manual indica que las plantillas UTILITY no requieren opt-in promocional, pero la aplicación
-sigue enviando solo a prestadores que autorizaron WhatsApp. Si se quiere relajar, es un cambio acotado en el encolado.
+**Consentimiento.** El manual indica que las plantillas UTILITY (avisos de la boleta) no requieren opt-in promocional,
+por eso la aplicación no pide una autorización aparte: basta con el teléfono.
 
 ## Puesta en marcha con Twilio
 
@@ -196,7 +190,7 @@ Twilio: `21211` número de destino inválido · `63016` plantilla no aprobada o 
 5. **Reiniciar la aplicación** y entrar como Administrador a **Maestros → Parámetros → Avisos por WhatsApp**. Debe decir
    *Activado*. Usa **Enviar prueba** con tu celular: envía la plantilla `solicitud_boleta` con datos ficticios y
    muestra el resultado o el error de Meta. Hazlo antes de pedir a los prestadores que autoricen.
-6. **Base de datos.** La aplicación crea la tabla `WhatsApp` y la columna de consentimiento al iniciar si tiene permiso
+6. **Base de datos.** La aplicación crea la tabla `WhatsApp` al iniciar si tiene permiso
    `db_ddladmin`. Si no, un DBA ejecuta `database/09_WhatsApp.sql`.
 
 ## Seguimiento
@@ -216,7 +210,7 @@ no coincide · `131026` el número no tiene WhatsApp · `190` el token venció o
   sube con el uso y la verificación del negocio. Un día de punta con muchos prestadores puede superarlo: los mensajes
   excedidos fallan con error, quedan registrados y los prestadores igual reciben el correo.
 - **Calidad del número.** Si los prestadores bloquean o reportan los mensajes, Meta puede reducir el límite del número.
-  Por eso solo se escribe a quien autorizó y solo con avisos de la boleta.
+  Por eso solo se envían avisos de la boleta.
 - **Pruebas.** El envío, con ambos proveedores, se probó con pruebas automáticas y contra servidores que imitan las API
   de Meta y de Twilio (formato de la solicitud, autenticación, reintentos y errores). La primera conexión real se
   valida con **Enviar prueba**.

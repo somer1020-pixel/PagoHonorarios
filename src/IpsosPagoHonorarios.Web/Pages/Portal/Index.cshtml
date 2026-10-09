@@ -111,16 +111,3 @@
     </dl>
     <span class="text-12 muted">Solo lectura. Para cambiar tu cuenta, contacta a Operaciones.</span>
 </section>
-@if (Model.WhatsAppDisponible)
-{
-    <section class="tarjeta">
-        <h2>Avisos por WhatsApp</h2>
-        <form method="post" asp-page-handler="WhatsApp" class="d-flex flex-column gap-3">
-            <div><label class="form-label" for="wa-t">Tu celular</label><input id="wa-t" name="telefono" class="form-control" value="@pr.Telefono" placeholder="9 1234 5678" inputmode="tel" /></div>
-            <label class="d-flex gap-2 align-items-start text-13"><input type="checkbox" name="acepta" value="true" @(pr.WhatsAppAutorizado ? "checked" : null) />
-                <span>Acepto recibir por WhatsApp los avisos de este portal: cuándo subir mi boleta, recordatorios y boletas observadas.</span></label>
-            <button class="btn btn-secondary align-self-start">Guardar</button>
-        </form>
-        <span class="text-12 muted">Puedes quitar la autorización cuando quieras. Los correos se siguen enviando.@(pr.WhatsAppAutorizadoEn is { } w ? $" Autorizado el {Formato.Fecha(w)}." : "")</span>
-    </section>
-}
